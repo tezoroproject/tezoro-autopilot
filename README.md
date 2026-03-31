@@ -9,22 +9,28 @@ Tezoro Aggregator is an ERC-4626 compliant vault that allocates user deposits ac
 ## Repository Structure
 
 ```
-TezoroV1_1.sol                           Core ERC-4626 vault
-RewardsModule.sol                      Claims executor, swap engine, auto-compounding
-interfaces/
-    IStrategy.sol                      Universal strategy adapter interface
-    ITezoroV1_1.sol                      Vault interface for RewardsModule
-    IAaveV3Pool.sol                    Aave V3 lending pool interface
-    ICompoundV3Comet.sol               Compound V3 Comet interface
-    ICometRewards.sol                  Compound V3 rewards interface
-    IMorpho.sol                        Morpho Blue singleton interface
-    IRewardsController.sol             Aave/Spark rewards controller interface
-strategies/
-    AaveV3Strategy.sol                 Aave V3 adapter (also used for Spark)
-    CompoundV3Strategy.sol             Compound V3 adapter
-    FluidStrategy.sol                  Fluid fToken adapter
-    ERC4626MultiStrategy.sol           Multi-vault adapter (distributes across ERC-4626 sub-vaults)
-    MorphoBlueMultiStrategy.sol        Multi-market Morpho adapter (distributes across Morpho Blue markets)
+src/
+    TezoroV1_1.sol                     Core ERC-4626 vault
+    RewardsModule.sol                  Claims executor, swap engine, auto-compounding
+    interfaces/
+        IStrategy.sol                  Universal strategy adapter interface
+        ITezoroV1_1.sol                Vault interface for RewardsModule
+        IAaveV3Pool.sol                Aave V3 lending pool interface
+        ICompoundV3Comet.sol           Compound V3 Comet interface
+        ICometRewards.sol              Compound V3 rewards interface
+        IMorpho.sol                    Morpho Blue singleton interface
+        IRewardsController.sol         Aave/Spark rewards controller interface
+    strategies/
+        AaveV3Strategy.sol             Aave V3 adapter (also used for Spark)
+        CompoundV3Strategy.sol         Compound V3 adapter
+        FluidStrategy.sol              Fluid fToken adapter
+        ERC4626MultiStrategy.sol       Multi-vault adapter (distributes across ERC-4626 sub-vaults)
+        MorphoBlueMultiStrategy.sol    Multi-market Morpho adapter (distributes across Morpho Blue markets)
+test/
+    unit/                              Unit tests (mock-based, no RPC required)
+    fuzz/                              Fuzz and invariant tests (mainnet fork)
+    fork/                              Integration tests against live protocols (mainnet fork)
+        shared/                        Shared test infrastructure
 ```
 
 ## Architecture
@@ -200,6 +206,51 @@ Users trust:
 3. The keeper (bounded actions). Keeper can rebalance and harvest but cannot extract funds or change parameters.
 
 Admin **cannot** block withdrawals. The only irreversible admin action is strategy removal with fund loss (emitted as event).
+
+## Testing
+
+### Prerequisites
+
+- [Foundry](https://getfoundry.sh/) (forge, anvil)
+- RPC endpoints for fork tests (Alchemy, Infura, or any archive node)
+
+### Setup
+
+```bash
+# Install dependencies
+forge install
+
+# Copy and configure RPC endpoints
+cp .env.example .env
+# Edit .env with your RPC URLs
+```
+
+### Running Tests
+
+```bash
+# Unit tests (no RPC required, fast)
+forge test --match-path "test/unit/*"
+
+# Fuzz + invariant tests (requires Ethereum mainnet RPC)
+forge test --match-path "test/fuzz/*"
+
+# Fork tests -- all chains (requires all RPC endpoints)
+forge test --match-path "test/fork/*"
+
+# Full suite
+forge test
+```
+
+### Test Suite Overview
+
+| Category | Files | Tests | Description |
+| -------- | ----- | ----- | ----------- |
+| Unit | 7 | 390 | Core vault, strategies, rewards module, performance fee, deposit freeze |
+| Fuzz / Invariant | 6 | 75 | Property-based testing: share price monotonicity, solvency, ERC-4626 round-trips |
+| Fork (per-chain) | 6 | ~3,000 | Live protocol integration across Ethereum, Arbitrum, Optimism, Base, BSC, Polygon |
+| Fork (standalone) | 11 | ~300 | Security regressions, ERC-4626 compliance, multi-vault isolation, reward pipelines |
+
+Fork tests use shared infrastructure (`test/fork/shared/`) to run the same test suite against every supported chain and token combination.
 
 ## Compiler Settings
 

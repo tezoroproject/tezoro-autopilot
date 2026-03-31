@@ -1,0 +1,12 @@
+# Compiler output
+cache/
+out/
+
+# Dependencies
+lib/
+
+# Environment
+.env
+
+# OS
+.DS_Store
