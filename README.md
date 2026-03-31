@@ -263,9 +263,6 @@ Fork tests use shared infrastructure (`test/fork/shared/`) to run the same test 
 
 | Contract | Address |
 | -------- | ------- |
-| TezoroV1_1 (tUSDC-A, conservative, v1) | [`0x6992B35d23A0B7732a6b0d6e6Fc10A76c08B3d16`](https://etherscan.io/address/0x6992B35d23A0B7732a6b0d6e6Fc10A76c08B3d16) |
-| TezoroV1_1 (tUSDC-A, conservative, v1.1) | [`0x7cc42747862ecACe79FA89BeFcB29C94d2558dEC`](https://etherscan.io/address/0x7cc42747862ecACe79FA89BeFcB29C94d2558dEC) |
-| TezoroV1_1 (tUSDC-B, moderate, v1) | [`0x7E441d9b0947bF4CA007770233776476bb539B09`](https://etherscan.io/address/0x7E441d9b0947bF4CA007770233776476bb539B09) |
-| TezoroV1_1 (tUSDC-B, moderate, v1.1) | [`0xD0F2812F57D284c0d30Ddd8f73b146Ef0cD5a25c`](https://etherscan.io/address/0xD0F2812F57D284c0d30Ddd8f73b146Ef0cD5a25c) |
-| TezoroV1_1 (tUSDC, aggressive, v1) | [`0xD22DC6a8087d1D8507A3FD96d9653613157f1832`](https://etherscan.io/address/0xD22DC6a8087d1D8507A3FD96d9653613157f1832) |
-| TezoroV1_1 (tUSDC, aggressive, v1.1) | [`0xa139C6a7dd1Bd76Ae3FBCCF4F8bEbA5C4f26513d`](https://etherscan.io/address/0xa139C6a7dd1Bd76Ae3FBCCF4F8bEbA5C4f26513d) |
+| TezoroV1_1 (tUSDC-A, conservative) | [`0x7cc42747862ecACe79FA89BeFcB29C94d2558dEC`](https://etherscan.io/address/0x7cc42747862ecACe79FA89BeFcB29C94d2558dEC) |
+| TezoroV1_1 (tUSDC-B, moderate) | [`0xD0F2812F57D284c0d30Ddd8f73b146Ef0cD5a25c`](https://etherscan.io/address/0xD0F2812F57D284c0d30Ddd8f73b146Ef0cD5a25c) |
+| TezoroV1_1 (tUSDC-C, aggressive) | [`0xa139C6a7dd1Bd76Ae3FBCCF4F8bEbA5C4f26513d`](https://etherscan.io/address/0xa139C6a7dd1Bd76Ae3FBCCF4F8bEbA5C4f26513d) |
