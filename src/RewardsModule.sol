@@ -26,6 +26,7 @@ contract RewardsModule is ReentrancyGuard {
     address public admin;
     address public pendingAdmin;
     address public keeper;
+    bool public paused;
 
     // Claims Executor: target address => function selector => allowed
     mapping(address => mapping(bytes4 => bool)) public claimWhitelist;
@@ -46,6 +47,8 @@ contract RewardsModule is ReentrancyGuard {
     event AdminTransferred(address indexed previousAdmin, address indexed newAdmin);
     event KeeperUpdated(address indexed previousKeeper, address indexed newKeeper);
     event TokenRescued(address indexed token, address indexed to, uint256 amount);
+    event Paused();
+    event Unpaused();
 
     // --- Errors ---
 
@@ -54,6 +57,7 @@ contract RewardsModule is ReentrancyGuard {
     error NotAdminOrKeeper();
     error ZeroAddress();
     error TargetNotWhitelisted();
+    error TargetHasNoCode();
     error RouterNotWhitelisted();
     error InvalidTokenOut();
     error SlippageExceeded();
@@ -62,6 +66,7 @@ contract RewardsModule is ReentrancyGuard {
     error CannotRescueBaseAsset();
     error CannotSwapBaseAsset();
     error SwapCallFailed();
+    error IsPaused();
 
     // --- Modifiers ---
 
@@ -72,6 +77,11 @@ contract RewardsModule is ReentrancyGuard {
 
     modifier onlyAdminOrKeeper() {
         if (msg.sender != admin && msg.sender != keeper) revert NotAdminOrKeeper();
+        _;
+    }
+
+    modifier whenNotPaused() {
+        if (paused) revert IsPaused();
         _;
     }
 
@@ -92,7 +102,8 @@ contract RewardsModule is ReentrancyGuard {
     ///         Used for merkle claims (Morpho URD, Merkl), airdrops, etc.
     /// @param target The contract to call
     /// @param data The calldata (must match a whitelisted selector)
-    function executeClaim(address target, bytes calldata data) external onlyAdminOrKeeper nonReentrant {
+    function executeClaim(address target, bytes calldata data) external onlyAdminOrKeeper whenNotPaused nonReentrant {
+        if (target.code.length == 0) revert TargetHasNoCode();
         if (data.length < 4) revert TargetNotWhitelisted();
         bytes4 selector = bytes4(data[:4]);
         if (!claimWhitelist[target][selector]) revert TargetNotWhitelisted();
@@ -127,7 +138,7 @@ contract RewardsModule is ReentrancyGuard {
         uint256 amountIn,
         uint256 minAmountOut,
         bytes calldata routerData
-    ) external onlyAdminOrKeeper nonReentrant {
+    ) external onlyAdminOrKeeper whenNotPaused nonReentrant {
         if (!allowedRouters[router]) revert RouterNotWhitelisted();
         if (tokenOut != baseAsset) revert InvalidTokenOut();
         if (tokenIn == baseAsset) revert CannotSwapBaseAsset();
@@ -162,7 +173,7 @@ contract RewardsModule is ReentrancyGuard {
 
     /// @notice Send all base asset balance to the vault via depositRewards().
     ///         This is the ONLY way assets leave this contract to the vault.
-    function sweepToVault() external onlyAdminOrKeeper nonReentrant {
+    function sweepToVault() external onlyAdminOrKeeper whenNotPaused nonReentrant {
         uint256 balance = IERC20(baseAsset).balanceOf(address(this));
         if (balance == 0) revert NothingToSweep();
 
@@ -192,6 +203,16 @@ contract RewardsModule is ReentrancyGuard {
     function setKeeper(address newKeeper) external onlyAdmin {
         emit KeeperUpdated(keeper, newKeeper);
         keeper = newKeeper;
+    }
+
+    function pause() external onlyAdmin {
+        paused = true;
+        emit Paused();
+    }
+
+    function unpause() external onlyAdmin {
+        paused = false;
+        emit Unpaused();
     }
 
     /// @notice Rescue stuck tokens (e.g., tokens sent accidentally).

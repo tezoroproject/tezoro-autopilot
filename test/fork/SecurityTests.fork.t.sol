@@ -1182,12 +1182,13 @@ contract SecurityTests is BaseChainForkTest {
 
         // Whitelist a selector on a specific target
         bytes4 claimSel = bytes4(keccak256("claim(address,address,bool)"));
-        address legitimateTarget = address(0x123);
+        address legitimateTarget = address(vault); // use a real contract
         vm.prank(admin);
         rm.setClaimWhitelist(legitimateTarget, claimSel, true);
 
-        // Same selector on a DIFFERENT target should be rejected
-        address differentTarget = address(0x456);
+        // Same selector on a DIFFERENT contract target should be rejected
+        // (use another deployed contract so it passes code-size check)
+        address differentTarget = address(rm);
         bytes memory data = abi.encodeWithSelector(claimSel, address(0), address(0), true);
 
         vm.prank(keeper);

@@ -255,8 +255,9 @@ contract RewardsModuleTest is Test {
         address fakeTarget = makeAddr("fakeTarget");
         bytes memory data = abi.encodeWithSignature("claim()");
 
+        // EOA target hits code-size check first
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.TargetNotWhitelisted.selector);
+        vm.expectRevert(RewardsModule.TargetHasNoCode.selector);
         module.executeClaim(fakeTarget, data);
     }
 
@@ -559,9 +560,12 @@ contract RewardsModuleTest is Test {
     }
 
     function test_executeClaim_reverts_dataShorterThan4Bytes() public {
+        // Deploy a contract at the target address so it passes code-size check
+        MockClaimable target = new MockClaimable(address(rwd));
+
         vm.prank(keeper);
         vm.expectRevert(RewardsModule.TargetNotWhitelisted.selector);
-        module.executeClaim(makeAddr("target"), hex"aabbcc");
+        module.executeClaim(address(target), hex"aabbcc");
     }
 
     function test_rescueToken_reverts_zeroAddress() public {

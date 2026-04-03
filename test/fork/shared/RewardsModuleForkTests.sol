@@ -184,11 +184,12 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         vm.prank(admin);
         rm.setKeeper(keeper);
 
+        // Use a real contract address (vault) so it passes code-size check
         bytes memory data = abi.encodeWithSignature("claim(address,address,bool)", address(0), address(0), true);
 
         vm.prank(keeper);
         vm.expectRevert(RewardsModule.TargetNotWhitelisted.selector);
-        rm.executeClaim(address(0x1), data);
+        rm.executeClaim(address(vault), data);
     }
 
     function test_rewardsModule_executeClaim_reverts_notKeeper() public {
@@ -204,9 +205,10 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     function test_rewardsModule_executeClaim_reverts_shortData() public {
         RewardsModule rm = new RewardsModule(address(vault), admin);
 
+        // Use a real contract address so it passes code-size check
         vm.prank(admin);
         vm.expectRevert(RewardsModule.TargetNotWhitelisted.selector);
-        rm.executeClaim(address(0x1), hex"001122"); // < 4 bytes
+        rm.executeClaim(address(vault), hex"001122"); // < 4 bytes
     }
 
     /// @notice Real executeClaim: supply to Compound from RM, accrue rewards, claim via executeClaim
