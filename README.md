@@ -6,12 +6,34 @@ Solidity smart contracts for the Tezoro Aggregator yield vault.
 
 Tezoro Aggregator is an ERC-4626 compliant vault that allocates user deposits across multiple DeFi lending protocols (Aave V3, Compound V3, Spark, Morpho Blue, Fluid, and any ERC-4626 vault). A keeper rebalances allocations; a performance fee is charged on yield above a high water mark. Withdrawals are always open regardless of pause state.
 
+## Audit Scope
+
+**Primary review target: V1_2 contracts** -- these contain fixes from internal pre-audit review and will replace the currently deployed V1_1 contracts.
+
+### V1_2 contracts (for audit review)
+
+| Contract | Changes from V1_1 |
+| -------- | ----------------- |
+| `TezoroV1_2.sol` | **M-1:** Two-pass rebalance (withdrawals first, then deposits) for single-call convergence. **M-2:** Paused strategies stay in `totalAssets()` -- no share price drop on pause. **L-1:** Comment fix. |
+| `RewardsModuleV1_2.sol` | **L-3:** `executeClaim` emits return data. **L-4:** Trust assumption documented in NatSpec. |
+| `AaveV3StrategyV1_2.sol` | **L-2:** Added `ReentrancyGuard` (defense-in-depth). |
+| `CompoundV3StrategyV1_2.sol` | **L-2:** Added `ReentrancyGuard` (defense-in-depth). |
+| `FluidStrategyV1_2.sol` | **L-2:** Added `ReentrancyGuard` (defense-in-depth). |
+| `ERC4626MultiStrategyV1_2.sol` | **L-5:** `setKeeper(address(0))` allowed (admin-only mode). |
+| `MorphoBlueMultiStrategyV1_2.sol` | **L-5:** `setKeeper(address(0))` allowed (admin-only mode). |
+
+### V1_1 contracts (currently deployed)
+
+The V1_1 contracts remain in the repo for reference. They are currently deployed on mainnet (see [Deployments](#deployments)).
+
 ## Repository Structure
 
 ```
 src/
-    TezoroV1_1.sol                     Core ERC-4626 vault
-    RewardsModule.sol                  Claims executor, swap engine, auto-compounding
+    TezoroV1_2.sol                     Core ERC-4626 vault (V1_2 -- audit target)
+    RewardsModuleV1_2.sol              Claims executor, swap engine (V1_2 -- audit target)
+    TezoroV1_1.sol                     Core ERC-4626 vault (V1_1 -- currently deployed)
+    RewardsModule.sol                  Claims executor, swap engine (V1_1 -- currently deployed)
     interfaces/
         IStrategy.sol                  Universal strategy adapter interface
         ITezoroV1_1.sol                Vault interface for RewardsModule
@@ -21,13 +43,19 @@ src/
         IMorpho.sol                    Morpho Blue singleton interface
         IRewardsController.sol         Aave/Spark rewards controller interface
     strategies/
-        AaveV3Strategy.sol             Aave V3 adapter (also used for Spark)
-        CompoundV3Strategy.sol         Compound V3 adapter
-        FluidStrategy.sol              Fluid fToken adapter
-        ERC4626MultiStrategy.sol       Multi-vault adapter (distributes across ERC-4626 sub-vaults)
-        MorphoBlueMultiStrategy.sol    Multi-market Morpho adapter (distributes across Morpho Blue markets)
+        AaveV3StrategyV1_2.sol         Aave V3 adapter (V1_2 -- audit target)
+        CompoundV3StrategyV1_2.sol     Compound V3 adapter (V1_2 -- audit target)
+        FluidStrategyV1_2.sol          Fluid fToken adapter (V1_2 -- audit target)
+        ERC4626MultiStrategyV1_2.sol   Multi-vault adapter (V1_2 -- audit target)
+        MorphoBlueMultiStrategyV1_2.sol Multi-market Morpho adapter (V1_2 -- audit target)
+        AaveV3Strategy.sol             Aave V3 adapter (V1_1 -- currently deployed)
+        CompoundV3Strategy.sol         Compound V3 adapter (V1_1 -- currently deployed)
+        FluidStrategy.sol              Fluid fToken adapter (V1_1 -- currently deployed)
+        ERC4626MultiStrategy.sol       Multi-vault adapter (V1_1 -- currently deployed)
+        MorphoBlueMultiStrategy.sol    Multi-market Morpho adapter (V1_1 -- currently deployed)
 test/
     unit/                              Unit tests (mock-based, no RPC required)
+        TezoroV1_2.t.sol               V1_2-specific regression tests (M-1, M-2)
     fuzz/                              Fuzz and invariant tests (mainnet fork)
     fork/                              Integration tests against live protocols (mainnet fork)
         shared/                        Shared test infrastructure
@@ -37,7 +65,7 @@ test/
 
 ```
                     +-------------------+
-User deposits -->   |   TezoroV1_1.sol    |   <-- ERC-4626 vault
+User deposits -->   |   TezoroV1_2.sol    |   <-- ERC-4626 vault
                     | (idle buffer)     |
                     +--------+----------+
                              |
