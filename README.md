@@ -202,7 +202,7 @@ Distributes funds across whitelisted Morpho Blue markets (supply-side only). Kee
 
 Users trust:
 1. The immutable vault contract code.
-2. The admin (single address, planned migration to multisig). Admin can add/remove strategies, change allocations, change fees (timelocked), force-redeem users (optional timelock), and pause.
+2. The admin ([Safe multisig `0x9D7e68c2c0D43f97B873336471927d7C0171e78A`](https://app.safe.global/home?safe=eth:0x9D7e68c2c0D43f97B873336471927d7C0171e78A)). Admin can add/remove strategies, change allocations, change fees (timelocked), force-redeem users (optional timelock), and pause.
 3. The keeper (bounded actions). Keeper can rebalance and harvest but cannot extract funds or change parameters.
 
 Admin **cannot** block withdrawals. The only irreversible admin action is strategy removal with fund loss (emitted as event).
@@ -266,3 +266,4 @@ Fork tests use shared infrastructure (`test/fork/shared/`) to run the same test 
 | TezoroV1_1 (tUSDC-A, conservative) | [`0x7cc42747862ecACe79FA89BeFcB29C94d2558dEC`](https://etherscan.io/address/0x7cc42747862ecACe79FA89BeFcB29C94d2558dEC) |
 | TezoroV1_1 (tUSDC-B, moderate) | [`0xD0F2812F57D284c0d30Ddd8f73b146Ef0cD5a25c`](https://etherscan.io/address/0xD0F2812F57D284c0d30Ddd8f73b146Ef0cD5a25c) |
 | TezoroV1_1 (tUSDC-C, aggressive) | [`0xa139C6a7dd1Bd76Ae3FBCCF4F8bEbA5C4f26513d`](https://etherscan.io/address/0xa139C6a7dd1Bd76Ae3FBCCF4F8bEbA5C4f26513d) |
+| Admin (Safe multisig) | [`0x9D7e68c2c0D43f97B873336471927d7C0171e78A`](https://etherscan.io/address/0x9D7e68c2c0D43f97B873336471927d7C0171e78A) |
