@@ -8,9 +8,26 @@ Tezoro Aggregator is an ERC-4626 compliant vault that allocates user deposits ac
 
 ## Audit Scope
 
-**Primary review target: V1_2 contracts** -- these contain fixes from internal pre-audit review and will replace the currently deployed V1_1 contracts.
+This repository contains two versions of the contracts:
 
-### V1_2 contracts (for audit review)
+- **V1_1** -- currently deployed on Ethereum mainnet with live TVL (see [Deployments](#deployments)).
+- **V1_2** -- contains fixes from an internal pre-audit review. These will replace V1_1 after audit, but redeployment requires TVL migration, so V1_1 remains in production for now.
+
+**Both versions should be audited.** V1_1 is what users interact with today; V1_2 is what will be deployed next. The fixes in V1_2 address issues we identified internally -- we want the auditor to verify both that V1_1's known issues are correctly catalogued and that V1_2's fixes are sound.
+
+### Known Issues in V1_1 (fixed in V1_2)
+
+| ID | Severity | Description |
+| -- | -------- | ----------- |
+| M-1 | Medium | **Single-pass rebalance does not converge in one call.** `_rebalance()` processes strategies in array order. If an earlier strategy needs funds from a later one, the deposit fails because the withdrawal hasn't happened yet. Requires a second `rebalance()` call. |
+| M-2 | Medium | **Pausing a strategy drops share price.** `totalAssets()` excludes paused strategies' `trackedBalance`, even when funds are safe and the pause is precautionary. Creates an arbitrage window: buy during pause (cheap), sell after unpause (expensive). |
+| L-1 | Low | **Stale comment.** `_availableLiquidity` comment says "reduced by 1" but code subtracts 2. Behavior is correct. |
+| L-2 | Low | **Simple strategies lack ReentrancyGuard.** `AaveV3Strategy`, `CompoundV3Strategy`, `FluidStrategy` rely on vault's `nonReentrant` + `onlyVault`. Safe today, but defense-in-depth recommends adding it. |
+| L-3 | Low | **`executeClaim` return data discarded.** Some claim targets return useful info (amounts claimed). Not exploitable. |
+| L-4 | Low | **`routerData` in `swap()` is opaque.** Keeper trust assumption not documented. Balance-before/after check mitigates, but worth noting. |
+| L-5 | Low | **`setKeeper` in multi-strategies rejects `address(0)`.** Unlike the vault (which allows `address(0)` for admin-only mode), strategies cannot disable the keeper role. |
+
+### V1_2 contracts (fixes applied)
 
 | Contract | Changes from V1_1 |
 | -------- | ----------------- |
@@ -24,7 +41,7 @@ Tezoro Aggregator is an ERC-4626 compliant vault that allocates user deposits ac
 
 ### V1_1 contracts (currently deployed)
 
-The V1_1 contracts remain in the repo for reference. They are currently deployed on mainnet (see [Deployments](#deployments)).
+V1_1 contracts are deployed on Ethereum mainnet with live TVL. They remain in the repo as the production reference. The known issues listed above are accepted risks until V1_2 is deployed.
 
 ## Repository Structure
 
