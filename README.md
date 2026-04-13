@@ -17,27 +17,27 @@ This repository contains two versions of the contracts:
 
 ### Known Issues in V1_1 (fixed in V1_2)
 
-| ID | Severity | Description |
-| -- | -------- | ----------- |
-| M-1 | Medium | **Single-pass rebalance does not converge in one call.** `_rebalance()` processes strategies in array order. If an earlier strategy needs funds from a later one, the deposit fails because the withdrawal hasn't happened yet. Requires a second `rebalance()` call. |
-| M-2 | Medium | **Pausing a strategy drops share price.** `totalAssets()` excludes paused strategies' `trackedBalance`, even when funds are safe and the pause is precautionary. Creates an arbitrage window: buy during pause (cheap), sell after unpause (expensive). |
-| L-1 | Low | **Stale comment.** `_availableLiquidity` comment says "reduced by 1" but code subtracts 2. Behavior is correct. |
-| L-2 | Low | **Simple strategies lack ReentrancyGuard.** `AaveV3Strategy`, `CompoundV3Strategy`, `FluidStrategy` rely on vault's `nonReentrant` + `onlyVault`. Safe today, but defense-in-depth recommends adding it. |
-| L-3 | Low | **`executeClaim` return data discarded.** Some claim targets return useful info (amounts claimed). Not exploitable. |
-| L-4 | Low | **`routerData` in `swap()` is opaque.** Keeper trust assumption not documented. Balance-before/after check mitigates, but worth noting. |
-| L-5 | Low | **`setKeeper` in multi-strategies rejects `address(0)`.** Unlike the vault (which allows `address(0)` for admin-only mode), strategies cannot disable the keeper role. |
+| # | Description |
+| - | ----------- |
+| 1 | **Single-pass rebalance does not converge in one call.** `_rebalance()` processes strategies in array order. If an earlier strategy needs funds from a later one, the deposit fails because the withdrawal hasn't happened yet. Requires a second `rebalance()` call. |
+| 2 | **Pausing a strategy drops share price.** `totalAssets()` excludes paused strategies' `trackedBalance`, even when funds are safe and the pause is precautionary. Creates an arbitrage window: buy during pause (cheap), sell after unpause (expensive). |
+| 3 | **Stale comment.** `_availableLiquidity` comment says "reduced by 1" but code subtracts 2. Behavior is correct. |
+| 4 | **Simple strategies lack ReentrancyGuard.** `AaveV3Strategy`, `CompoundV3Strategy`, `FluidStrategy` rely on vault's `nonReentrant` + `onlyVault`. Safe today, but defense-in-depth recommends adding it. |
+| 5 | **`executeClaim` return data discarded.** Some claim targets return useful info (amounts claimed). Not exploitable. |
+| 6 | **`routerData` in `swap()` is opaque.** Keeper trust assumption not documented. Balance-before/after check mitigates, but worth noting. |
+| 7 | **`setKeeper` in multi-strategies rejects `address(0)`.** Unlike the vault (which allows `address(0)` for admin-only mode), strategies cannot disable the keeper role. |
 
 ### V1_2 contracts (fixes applied)
 
 | Contract | Changes from V1_1 |
 | -------- | ----------------- |
-| `TezoroV1_2.sol` | **M-1:** Two-pass rebalance (withdrawals first, then deposits) for single-call convergence. **M-2:** Paused strategies stay in `totalAssets()` -- no share price drop on pause. **L-1:** Comment fix. |
-| `RewardsModuleV1_2.sol` | **L-3:** `executeClaim` emits return data. **L-4:** Trust assumption documented in NatSpec. |
-| `AaveV3StrategyV1_2.sol` | **L-2:** Added `ReentrancyGuard` (defense-in-depth). |
-| `CompoundV3StrategyV1_2.sol` | **L-2:** Added `ReentrancyGuard` (defense-in-depth). |
-| `FluidStrategyV1_2.sol` | **L-2:** Added `ReentrancyGuard` (defense-in-depth). |
-| `ERC4626MultiStrategyV1_2.sol` | **L-5:** `setKeeper(address(0))` allowed (admin-only mode). |
-| `MorphoBlueMultiStrategyV1_2.sol` | **L-5:** `setKeeper(address(0))` allowed (admin-only mode). |
+| `TezoroV1_2.sol` | **#1:** Two-pass rebalance (withdrawals first, then deposits) for single-call convergence. **#2:** Paused strategies stay in `totalAssets()` -- no share price drop on pause. **#3:** Comment fix. |
+| `RewardsModuleV1_2.sol` | **#5:** `executeClaim` emits return data. **#6:** Trust assumption documented in NatSpec. |
+| `AaveV3StrategyV1_2.sol` | **#4:** Added `ReentrancyGuard` (defense-in-depth). |
+| `CompoundV3StrategyV1_2.sol` | **#4:** Added `ReentrancyGuard` (defense-in-depth). |
+| `FluidStrategyV1_2.sol` | **#4:** Added `ReentrancyGuard` (defense-in-depth). |
+| `ERC4626MultiStrategyV1_2.sol` | **#7:** `setKeeper(address(0))` allowed (admin-only mode). |
+| `MorphoBlueMultiStrategyV1_2.sol` | **#7:** `setKeeper(address(0))` allowed (admin-only mode). |
 
 ### V1_1 contracts (currently deployed)
 
