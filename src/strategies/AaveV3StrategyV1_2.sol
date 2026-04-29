@@ -23,6 +23,15 @@ contract AaveV3StrategyV1_2 is IStrategy {
     error NotVault();
     error ZeroAddress();
     error CannotSweepAsset();
+    /// @dev Thrown when the supplied aToken_ does not match the address Aave
+    ///      reports for `asset_` via getReserveData(asset_).aTokenAddress.
+    ///      Without this check, a deployment with the right asset+pool but a
+    ///      wrong aToken would create a real Aave position while every read
+    ///      path (balanceOf, availableLiquidity, isHealthy, harvest) and the
+    ///      zero-balance gate inside emergencyWithdraw would target an
+    ///      unrelated token — silently leaving funds behind broken reporting
+    ///      and recovery paths.
+    error AaveTokenMismatch();
 
     modifier onlyVault() {
         if (msg.sender != vault) revert NotVault();
@@ -34,6 +43,20 @@ contract AaveV3StrategyV1_2 is IStrategy {
         if (asset_ == address(0) || pool_ == address(0) || aToken_ == address(0) || vault_ == address(0)) {
             revert ZeroAddress();
         }
+
+        // Cross-check the aToken_ argument against what the pool reports for
+        // the reserve. We use a low-level staticcall + manual offset read to
+        // avoid Solidity's stack-too-deep limit on getReserveData's 15-return
+        // tuple. aTokenAddress sits at field index 8 → byte offset 32 + 8*32
+        // = 288 in the returned ABI-encoded blob.
+        (bool ok, bytes memory data) =
+            pool_.staticcall(abi.encodeWithSignature("getReserveData(address)", asset_));
+        if (!ok || data.length < 32 * 9) revert AaveTokenMismatch();
+        address reserveAToken;
+        assembly {
+            reserveAToken := mload(add(data, 288))
+        }
+        if (reserveAToken != aToken_) revert AaveTokenMismatch();
 
         asset = asset_;
         pool = IAaveV3Pool(pool_);

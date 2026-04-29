@@ -111,6 +111,25 @@ contract MockAavePool {
     function getConfiguration(address) external view returns (uint256) {
         return config;
     }
+
+    /// @notice Mocked getReserveData: returns 15 zero-padded slots with the
+    ///         aToken address at slot 8 (the layout the strategy reads via
+    ///         the manual-offset staticcall added by audit-fix(25)). Inline
+    ///         assembly avoids Solidity's stack-too-deep limit on the 15
+    ///         named-return tuple.
+    function getReserveData(address) external view {
+        MockAToken at = aToken;
+        assembly {
+            let m := mload(0x40)
+            // Zero-fill 480 bytes (15 * 32).
+            for { let i := 0 } lt(i, 0x1e0) { i := add(i, 0x20) } {
+                mstore(add(m, i), 0)
+            }
+            // Slot 8 (byte offset 256 = 0x100) holds aTokenAddress.
+            mstore(add(m, 0x100), at)
+            return(m, 0x1e0)
+        }
+    }
 }
 
 // ---- Tests ----
@@ -219,6 +238,40 @@ contract AaveV3StrategyV1_2Test is Test {
         uint256 withdrawn = strategy.emergencyWithdraw();
         assertEq(withdrawn, 0, "paused reserve emergencyWithdraw must not revert and must return 0");
     }
+
+    // =========================================================================
+    // Audit fix #25 (Oak 2026-04-24): constructor validates aToken pairing
+    // =========================================================================
+
+    /// @notice The constructor must cross-check aToken_ against the address
+    ///         the pool reports for the reserve. Pre-fix a deployment with
+    ///         the right asset+pool but a wrong aToken would silently create
+    ///         a real Aave position while every read path (balanceOf,
+    ///         availableLiquidity, isHealthy, harvest) and the zero-balance
+    ///         gate inside emergencyWithdraw targeted an unrelated token.
+    function test_auditFix25_constructorRevertsOnATokenMismatch() public {
+        // Use a different ERC-20 as the wrong aToken — anything that's not
+        // the pool's real aToken triggers the revert.
+        MockUSDC wrongToken = new MockUSDC();
+
+        vm.expectRevert(AaveV3StrategyV1_2.AaveTokenMismatch.selector);
+        new AaveV3StrategyV1_2(address(token), address(pool), address(wrongToken), vaultAddr, address(0));
+    }
+
+    /// @notice Sanity / happy path: matching aToken + pool deploys cleanly.
+    ///         Same construction the setUp() already exercises, asserted
+    ///         explicitly so a future tightening of the validation doesn't
+    ///         accidentally close the legitimate path.
+    function test_auditFix25_constructorAcceptsMatchingAToken() public {
+        AaveV3StrategyV1_2 ok = new AaveV3StrategyV1_2(
+            address(token), address(pool), address(aToken), vaultAddr, address(0)
+        );
+        assertEq(ok.asset(), address(token));
+    }
+
+    // =========================================================================
+    // Audit fix #18 (continued): partial liquidity scenario
+    // =========================================================================
 
     /// @notice When the reserve has only partial liquidity (e.g. heavily borrowed),
     ///         emergencyWithdraw recovers only the liquid portion instead of
