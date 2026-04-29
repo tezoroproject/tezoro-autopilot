@@ -659,12 +659,19 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             IStrategy strategy = strategies[i];
             if (pausedStrategies[strategy]) continue;
 
-            // Skip unhealthy strategies -- don't deposit more into them
-            // try-catch: broken strategy cannot block rebalance
-            try strategy.isHealthy() returns (bool healthy) {
-                if (!healthy) continue;
+            // Audit fix #12: read isHealthy but DO NOT skip the strategy here.
+            // Pre-fix, `continue` skipped both branches below — including the
+            // withdrawal branch, so an unhealthy strategy held funds even
+            // when the keeper was trying to de-risk by lowering its target.
+            // Post-fix: isHealthy gates only the deposit branch (no new
+            // capital into a broken venue); the withdraw branch runs
+            // unconditionally so liquidity that exists can still be pulled.
+            // Broken strategy that reverts on isHealthy is treated as unhealthy.
+            bool healthy;
+            try strategy.isHealthy() returns (bool h) {
+                healthy = h;
             } catch {
-                continue;
+                healthy = false;
             }
 
             uint256 targetBalance = total.mulDiv(targetAllocationBps[strategy], BPS);
@@ -680,8 +687,8 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
 
             uint256 currentBalance = trackedBalance[strategy];
 
-            if (targetBalance > currentBalance && !depositFrozenStrategies[strategy]) {
-                // Need to deposit more (skip if deposit-frozen)
+            if (targetBalance > currentBalance && !depositFrozenStrategies[strategy] && healthy) {
+                // Need to deposit more (skip if deposit-frozen or unhealthy — audit fix #12)
                 uint256 toDeposit = targetBalance - currentBalance;
 
                 // Respect deviation threshold: only rebalance if deviation exceeds threshold
