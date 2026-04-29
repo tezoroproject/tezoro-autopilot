@@ -2874,4 +2874,35 @@ contract TezoroV1_2Test is Test {
             "unpause must restore allowance"
         );
     }
+
+    // =========================================================================
+    // Audit fix #19 (Oak 2026-04-24): recallToIdle revokes ERC20 approval
+    // =========================================================================
+
+    /// @notice recallToIdle is the admin's distress button. Pre-fix it left the
+    ///         strategy's spend allowance intact, so a faulty/compromised
+    ///         strategy could keep pulling idle vault funds even after the
+    ///         operator had signalled distress.
+    function test_auditFix19_recallToIdleRevokesAllowance() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        IStrategy[] memory strats = new IStrategy[](1);
+        uint256[] memory bpsList = new uint256[](1);
+        strats[0] = IStrategy(address(strategyA));
+        bpsList[0] = 5_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        assertEq(token.allowance(address(vault), address(strategyA)), type(uint256).max);
+
+        vm.prank(admin);
+        vault.recallToIdle(IStrategy(address(strategyA)));
+
+        assertEq(
+            token.allowance(address(vault), address(strategyA)),
+            0,
+            "recallToIdle must revoke allowance"
+        );
+    }
 }
