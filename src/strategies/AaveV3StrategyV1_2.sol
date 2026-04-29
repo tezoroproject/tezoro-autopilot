@@ -73,6 +73,18 @@ contract AaveV3StrategyV1_2 is IStrategy {
     }
 
     function availableLiquidity() public view override returns (uint256) {
+        // Audit fix #7: respect Aave reserve activity/pause flags.
+        // Reserve config bitmap: bit 56 = ACTIVE, bit 60 = PAUSED. A paused
+        // or inactive reserve cannot service withdrawals, so reporting any
+        // available liquidity would overstate maxWithdraw/maxRedeem at the
+        // vault level. (FROZEN — bit 57 — only blocks new deposits, so
+        // withdrawals can still proceed and that flag is intentionally not
+        // gated here.)
+        uint256 config = pool.getConfiguration(asset);
+        bool isActive = (config & (uint256(1) << 56)) != 0;
+        bool isPaused = (config & (uint256(1) << 60)) != 0;
+        if (!isActive || isPaused) return 0;
+
         uint256 ourBalance = aToken.balanceOf(address(this));
         uint256 poolLiquidity = IERC20(asset).balanceOf(address(aToken));
         return ourBalance > poolLiquidity ? poolLiquidity : ourBalance;
