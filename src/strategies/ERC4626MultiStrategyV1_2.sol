@@ -7,11 +7,11 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IStrategy} from "../interfaces/IStrategy.sol";
 
-/// @title ERC4626MultiStrategy
+/// @title ERC4626MultiStrategyV1_2
 /// @notice Strategy adapter that wraps multiple whitelisted ERC-4626 vaults.
 ///         The vault calls standard IStrategy methods (deposit/withdraw).
 ///         A keeper allocates/deallocates idle funds across sub-vaults.
-contract ERC4626MultiStrategy is IStrategy, ReentrancyGuard {
+contract ERC4626MultiStrategyV1_2 is IStrategy, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint256 public immutable MAX_SUB_VAULTS;

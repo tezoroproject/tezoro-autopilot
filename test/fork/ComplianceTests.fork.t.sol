@@ -3,9 +3,9 @@ pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
-import {RewardsModule} from "../../src/RewardsModule.sol";
+import {RewardsModuleV1_2} from "../../src/RewardsModuleV1_2.sol";
 import {BaseChainForkTest} from "./shared/BaseChainForkTest.sol";
 
 // Ethereum mainnet addresses
@@ -141,7 +141,7 @@ contract ComplianceTests is BaseChainForkTest {
         vault.pauseVault();
 
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.VaultIsPaused.selector);
+        vm.expectRevert(TezoroV1_2.VaultIsPaused.selector);
         vault.mint(1e12, alice);
     }
 
@@ -517,24 +517,24 @@ contract ComplianceTests is BaseChainForkTest {
     }
 
     // =========================================================================
-    // RewardsModule Additional Coverage
+    // RewardsModuleV1_2 Additional Coverage
     // =========================================================================
 
     /// @notice rescueToken should revert on zero address recipient
     function test_rm_rescueToken_zeroRecipient() public {
         if (compRewardToken == address(0)) return;
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
         deal(compRewardToken, address(rm), 100e18);
 
         vm.prank(admin);
-        vm.expectRevert(RewardsModule.ZeroAddress.selector);
+        vm.expectRevert(RewardsModuleV1_2.ZeroAddress.selector);
         rm.rescueToken(compRewardToken, address(0), 100e18);
     }
 
     /// @notice executeClaim with whitelisted target should work (success path)
     function test_rm_executeClaim_successPath() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         // Deploy a mock claimable contract
         MockClaimable mock = new MockClaimable();
@@ -580,7 +580,7 @@ contract ComplianceTests is BaseChainForkTest {
         vault.setRewardsModule(rm);
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.StrategyNotActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyNotActive.selector);
         vault.sweepStrategyReward(IStrategy(address(0xdead)), address(0x1));
     }
 
@@ -590,7 +590,7 @@ contract ComplianceTests is BaseChainForkTest {
 
         // rewardsModule defaults to address(0)
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotRewardsModule.selector);
+        vm.expectRevert(TezoroV1_2.NotRewardsModule.selector);
         vault.sweepStrategyReward(IStrategy(address(aaveStrategy)), address(0x1));
     }
 

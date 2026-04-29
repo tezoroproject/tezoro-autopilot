@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
 
 // Ethereum mainnet assets
 address constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
@@ -40,7 +40,7 @@ contract AaveV4ERC4626MultiStrategyTrickyAssetsForkTest is Test {
 
     function test_usdt_nonStandardApprove_multiHubLifecycle() public {
         address[] memory spokes = _usdtSpokes();
-        ERC4626MultiStrategy strategy = _deployStrategy(USDT, "Aave V4 USDT", spokes);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(USDT, "Aave V4 USDT", spokes);
 
         for (uint256 i = 0; i < spokes.length; i++) {
             assertEq(IERC4626(spokes[i]).asset(), USDT);
@@ -79,7 +79,7 @@ contract AaveV4ERC4626MultiStrategyTrickyAssetsForkTest is Test {
     function test_usdt_plusSpoke_capOverflow_revertsWithAaveSelector() public {
         address[] memory spokes = new address[](1);
         spokes[0] = AAVE_V4_PLUS_USDT;
-        ERC4626MultiStrategy strategy = _deployStrategy(USDT, "Aave V4 USDT Plus", spokes);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(USDT, "Aave V4 USDT Plus", spokes);
 
         uint256 maxDeposit = IERC4626(AAVE_V4_PLUS_USDT).maxDeposit(address(strategy));
         if (maxDeposit == type(uint256).max) return;
@@ -89,7 +89,7 @@ contract AaveV4ERC4626MultiStrategyTrickyAssetsForkTest is Test {
 
         vm.prank(keeperAddr);
         (bool success, bytes memory revertData) =
-            address(strategy).call(abi.encodeCall(ERC4626MultiStrategy.allocate, (AAVE_V4_PLUS_USDT, amount)));
+            address(strategy).call(abi.encodeCall(ERC4626MultiStrategyV1_2.allocate, (AAVE_V4_PLUS_USDT, amount)));
 
         assertFalse(success);
         assertEq(_revertSelector(revertData), AAVE_V4_ADD_CAP_EXCEEDED_SELECTOR);
@@ -97,7 +97,7 @@ contract AaveV4ERC4626MultiStrategyTrickyAssetsForkTest is Test {
 
     function test_gho_18Decimals_multiHubAccountingAndLiquidity() public {
         address[] memory spokes = _ghoSpokes();
-        ERC4626MultiStrategy strategy = _deployStrategy(GHO, "Aave V4 GHO", spokes);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(GHO, "Aave V4 GHO", spokes);
 
         for (uint256 i = 0; i < spokes.length; i++) {
             assertEq(IERC4626(spokes[i]).asset(), GHO);
@@ -135,9 +135,9 @@ contract AaveV4ERC4626MultiStrategyTrickyAssetsForkTest is Test {
         address[] memory spokes
     )
         internal
-        returns (ERC4626MultiStrategy strategy)
+        returns (ERC4626MultiStrategyV1_2 strategy)
     {
-        strategy = new ERC4626MultiStrategy(asset, vaultAddr, adminAddr, strategyName, 64, new address[](0));
+        strategy = new ERC4626MultiStrategyV1_2(asset, vaultAddr, adminAddr, strategyName, 64, new address[](0));
 
         vm.startPrank(adminAddr);
         strategy.setKeeper(keeperAddr);
@@ -150,14 +150,14 @@ contract AaveV4ERC4626MultiStrategyTrickyAssetsForkTest is Test {
         IERC20(asset).forceApprove(address(strategy), type(uint256).max);
     }
 
-    function _depositIntoStrategy(ERC4626MultiStrategy strategy, address asset, uint256 amount) internal {
+    function _depositIntoStrategy(ERC4626MultiStrategyV1_2 strategy, address asset, uint256 amount) internal {
         deal(asset, vaultAddr, amount);
         vm.prank(vaultAddr);
         strategy.deposit(amount);
     }
 
     function _plannedAllocations(
-        ERC4626MultiStrategy strategy,
+        ERC4626MultiStrategyV1_2 strategy,
         address[] memory spokes,
         uint256 preferredPerSpoke
     )
@@ -180,7 +180,7 @@ contract AaveV4ERC4626MultiStrategyTrickyAssetsForkTest is Test {
         }
     }
 
-    function _allocatePlan(ERC4626MultiStrategy strategy, address[] memory spokes, uint256[] memory amounts) internal {
+    function _allocatePlan(ERC4626MultiStrategyV1_2 strategy, address[] memory spokes, uint256[] memory amounts) internal {
         vm.startPrank(keeperAddr);
         for (uint256 i = 0; i < spokes.length; i++) {
             if (amounts[i] == 0) continue;
@@ -190,7 +190,7 @@ contract AaveV4ERC4626MultiStrategyTrickyAssetsForkTest is Test {
     }
 
     function _sumDirectVaultAssets(
-        ERC4626MultiStrategy strategy,
+        ERC4626MultiStrategyV1_2 strategy,
         address[] memory spokes
     )
         internal

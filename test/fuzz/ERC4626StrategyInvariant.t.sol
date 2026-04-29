@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
 
 address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
@@ -12,11 +12,11 @@ address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 address constant STEAKHOUSE_USDC = 0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB;
 address constant GAUNTLET_USDC_CORE = 0x8eB67A509616cd6A7c1B3c8C21D48FF57df3d458;
 
-/// @notice Handler contract that performs random operations on ERC4626MultiStrategy.
+/// @notice Handler contract that performs random operations on ERC4626MultiStrategyV1_2.
 contract ERC4626StrategyHandler is Test {
     using SafeERC20 for IERC20;
 
-    ERC4626MultiStrategy public strategy;
+    ERC4626MultiStrategyV1_2 public strategy;
     address public vaultAddr;
     address public adminAddr;
     address public keeperAddr;
@@ -30,7 +30,7 @@ contract ERC4626StrategyHandler is Test {
     mapping(bytes4 => uint256) public ghost_callCount;
 
     constructor(
-        ERC4626MultiStrategy strategy_,
+        ERC4626MultiStrategyV1_2 strategy_,
         address vault_,
         address admin_,
         address keeper_,
@@ -173,11 +173,11 @@ contract ERC4626StrategyHandler is Test {
     }
 }
 
-/// @notice Invariant tests for ERC4626MultiStrategy.
+/// @notice Invariant tests for ERC4626MultiStrategyV1_2.
 contract ERC4626StrategyInvariantTest is Test {
     using SafeERC20 for IERC20;
 
-    ERC4626MultiStrategy strategy;
+    ERC4626MultiStrategyV1_2 strategy;
     ERC4626StrategyHandler handler;
 
     address vaultAddr = makeAddr("vault");
@@ -187,7 +187,7 @@ contract ERC4626StrategyInvariantTest is Test {
     function setUp() public {
         vm.createSelectFork("ethereum");
 
-        strategy = new ERC4626MultiStrategy(USDC, vaultAddr, adminAddr, "ERC4626 Invariant", 64, new address[](0));
+        strategy = new ERC4626MultiStrategyV1_2(USDC, vaultAddr, adminAddr, "ERC4626 Invariant", 64, new address[](0));
 
         vm.startPrank(adminAddr);
         strategy.setKeeper(keeperAddr);

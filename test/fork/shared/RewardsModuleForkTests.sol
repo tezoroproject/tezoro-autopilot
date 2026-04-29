@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {RewardsModule} from "../../../src/RewardsModule.sol";
+import {RewardsModuleV1_2} from "../../../src/RewardsModuleV1_2.sol";
 import {VaultForkTests} from "./VaultForkTests.sol";
 
 /// @dev Minimal Uniswap V3 SwapRouter interface for fork swap tests
@@ -36,17 +36,17 @@ address constant ODOS_V3 = 0x0D05a7D3448512B78fa8A9e46c4872C88C4a0D05;
 address constant PARASWAP_V6 = 0x6A000F20005980200259B80c5102003040001068;
 address constant ZEROX_PROXY = 0xDef1C0ded9bec7F1a1670819833240f027b25EfF;
 
-/// @notice RewardsModule fork tests: deploy, claims executor, swap engine, admin, multi-router, aggregators.
+/// @notice RewardsModuleV1_2 fork tests: deploy, claims executor, swap engine, admin, multi-router, aggregators.
 ///         Inherits VaultForkTests. Chain-specific test contracts inherit BaseChainForkTest which inherits this.
 abstract contract RewardsModuleForkTests is VaultForkTests {
     using SafeERC20 for IERC20;
 
     // =========================================================================
-    // RewardsModule Integration
+    // RewardsModuleV1_2 Integration
     // =========================================================================
 
     function test_rewardsModule_deploy_and_configure() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         assertEq(rm.vault(), address(vault));
         assertEq(rm.baseAsset(), token);
@@ -54,7 +54,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     }
 
     function test_rewardsModule_sweepToVault() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         vault.setRewardsModule(address(rm));
@@ -78,32 +78,32 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     }
 
     function test_rewardsModule_rescueToken_notBaseAsset() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         deal(token, address(rm), 100);
 
         vm.prank(admin);
-        vm.expectRevert(RewardsModule.CannotRescueBaseAsset.selector);
+        vm.expectRevert(RewardsModuleV1_2.CannotRescueBaseAsset.selector);
         rm.rescueToken(token, admin, 100);
     }
 
     function test_rewardsModule_accessControl() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         deal(token, address(rm), 100);
         vm.prank(admin);
         vault.setRewardsModule(address(rm));
 
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdminOrKeeper.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdminOrKeeper.selector);
         rm.sweepToVault();
 
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         rm.setClaimWhitelist(address(0x1), bytes4(0x12345678), true);
 
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         rm.setRouterWhitelist(address(0x1), true);
     }
 
@@ -112,8 +112,8 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         if (address(compoundStrategy) == address(0)) return;
         if (!_compRewardsActive()) return;
 
-        // 1. Deploy RewardsModule and configure
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        // 1. Deploy RewardsModuleV1_2 and configure
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         vault.setRewardsModule(address(rm));
@@ -156,11 +156,11 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     }
 
     // =========================================================================
-    // RewardsModule: Claims Executor
+    // RewardsModuleV1_2: Claims Executor
     // =========================================================================
 
     function test_rewardsModule_claimWhitelist_crud() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         address target = address(0x123);
         bytes4 selector = bytes4(keccak256("claim(address,address,bool)"));
@@ -180,7 +180,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     }
 
     function test_rewardsModule_executeClaim_reverts_notWhitelisted() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
         vm.prank(admin);
         rm.setKeeper(keeper);
 
@@ -188,26 +188,26 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         bytes memory data = abi.encodeWithSignature("claim(address,address,bool)", address(0), address(0), true);
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.TargetNotWhitelisted.selector);
+        vm.expectRevert(RewardsModuleV1_2.TargetNotWhitelisted.selector);
         rm.executeClaim(address(vault), data);
     }
 
     function test_rewardsModule_executeClaim_reverts_notKeeper() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         bytes memory data = abi.encodeWithSignature("claim(address,address,bool)", address(0), address(0), true);
 
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdminOrKeeper.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdminOrKeeper.selector);
         rm.executeClaim(address(0x1), data);
     }
 
     function test_rewardsModule_executeClaim_reverts_shortData() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         // Use a real contract address so it passes code-size check
         vm.prank(admin);
-        vm.expectRevert(RewardsModule.TargetNotWhitelisted.selector);
+        vm.expectRevert(RewardsModuleV1_2.TargetNotWhitelisted.selector);
         rm.executeClaim(address(vault), hex"001122"); // < 4 bytes
     }
 
@@ -215,7 +215,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     function test_rewardsModule_executeClaim_claimsCompRewards() public {
         if (!_compRewardsActive()) return;
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         // Whitelist CometRewards.claim
         bytes4 claimSelector = bytes4(keccak256("claim(address,address,bool)"));
@@ -241,7 +241,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         vm.warp(block.timestamp + 1 days);
         vm.roll(block.number + 7_200);
 
-        // Execute claim via RewardsModule
+        // Execute claim via RewardsModuleV1_2
         bytes memory claimData = abi.encodeWithSelector(claimSelector, compoundComet, address(rm), true);
 
         vm.prank(keeper);
@@ -252,11 +252,11 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     }
 
     // =========================================================================
-    // RewardsModule: Swap Engine
+    // RewardsModuleV1_2: Swap Engine
     // =========================================================================
 
     function test_rewardsModule_routerWhitelist_crud() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         address router = address(0x456);
 
@@ -272,17 +272,17 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     }
 
     function test_rewardsModule_swap_reverts_routerNotWhitelisted() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
         vm.prank(admin);
         rm.setKeeper(keeper);
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.RouterNotWhitelisted.selector);
+        vm.expectRevert(RewardsModuleV1_2.RouterNotWhitelisted.selector);
         rm.swap(address(0x1), address(0x2), token, 100, 0, hex"");
     }
 
     function test_rewardsModule_swap_reverts_invalidTokenOut() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
         address router = address(0x456);
 
         vm.startPrank(admin);
@@ -293,15 +293,15 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         address wrongToken = address(0xdead);
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.InvalidTokenOut.selector);
+        vm.expectRevert(RewardsModuleV1_2.InvalidTokenOut.selector);
         rm.swap(router, address(0x2), wrongToken, 100, 0, hex"");
     }
 
     function test_rewardsModule_swap_reverts_notKeeper() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdminOrKeeper.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdminOrKeeper.selector);
         rm.swap(address(0x1), address(0x2), token, 100, 0, hex"");
     }
 
@@ -311,14 +311,14 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         if (compRewardToken == address(0)) return;
         if (swapPath.length == 0) return;
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         rm.setKeeper(keeper);
         rm.setRouterWhitelist(uniswapRouter, true);
         vm.stopPrank();
 
-        // Deal COMP to RewardsModule
+        // Deal COMP to RewardsModuleV1_2
         uint256 compAmount = 10e18; // 10 COMP
         deal(compRewardToken, address(rm), compAmount);
 
@@ -357,7 +357,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         if (compRewardToken == address(0)) return;
         if (swapPath.length == 0) return;
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         rm.setKeeper(keeper);
@@ -382,16 +382,16 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         );
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.SlippageExceeded.selector);
+        vm.expectRevert(RewardsModuleV1_2.SlippageExceeded.selector);
         rm.swap(uniswapRouter, compRewardToken, token, compAmount, type(uint256).max, routerData);
     }
 
     // =========================================================================
-    // RewardsModule: Admin
+    // RewardsModuleV1_2: Admin
     // =========================================================================
 
     function test_rewardsModule_transferAdmin() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.prank(admin);
         rm.transferAdmin(alice);
@@ -404,7 +404,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
 
         // Old admin can no longer act
         vm.prank(admin);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         rm.setRouterWhitelist(address(0x1), true);
 
         // New admin can
@@ -414,19 +414,19 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     }
 
     function test_rewardsModule_transferAdmin_reverts_zeroAddress() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.prank(admin);
-        vm.expectRevert(RewardsModule.ZeroAddress.selector);
+        vm.expectRevert(RewardsModuleV1_2.ZeroAddress.selector);
         rm.transferAdmin(address(0));
     }
 
     function test_rewardsModule_setKeeper_access() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         // Non-admin cannot set keeper
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         rm.setKeeper(alice);
 
         // Admin can set keeper
@@ -441,7 +441,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     }
 
     function test_rewardsModule_sweepToVault_reverts_empty() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         vault.setRewardsModule(address(rm));
@@ -449,22 +449,22 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         vm.stopPrank();
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.NothingToSweep.selector);
+        vm.expectRevert(RewardsModuleV1_2.NothingToSweep.selector);
         rm.sweepToVault();
     }
 
     function test_rewardsModule_constructor_reverts_zeroAddress() public {
-        vm.expectRevert(RewardsModule.ZeroAddress.selector);
-        new RewardsModule(address(0), admin);
+        vm.expectRevert(RewardsModuleV1_2.ZeroAddress.selector);
+        new RewardsModuleV1_2(address(0), admin);
 
-        vm.expectRevert(RewardsModule.ZeroAddress.selector);
-        new RewardsModule(address(vault), address(0));
+        vm.expectRevert(RewardsModuleV1_2.ZeroAddress.selector);
+        new RewardsModuleV1_2(address(vault), address(0));
     }
 
     function test_rewardsModule_rescueToken_works_forNonBase() public {
         if (compRewardToken == address(0)) return;
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         uint256 stuckAmount = 1000e18;
         deal(compRewardToken, address(rm), stuckAmount);
@@ -479,11 +479,11 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     function test_rewardsModule_rescueToken_reverts_notAdmin() public {
         if (compRewardToken == address(0)) return;
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
         deal(compRewardToken, address(rm), 100);
 
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         rm.rescueToken(compRewardToken, alice, 100);
     }
 
@@ -494,8 +494,8 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         if (address(compoundStrategy) == address(0)) return;
         if (!_compRewardsActive()) return;
 
-        // 1. Deploy and configure RewardsModule
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        // 1. Deploy and configure RewardsModuleV1_2
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         vault.setRewardsModule(address(rm));
@@ -555,7 +555,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     }
 
     // =========================================================================
-    // RewardsModule: Multi-Router (Uniswap V2 + Aggregator Verification)
+    // RewardsModuleV1_2: Multi-Router (Uniswap V2 + Aggregator Verification)
     // =========================================================================
 
     /// @notice Real swap: COMP → base asset via Uniswap V2 Router
@@ -564,7 +564,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         if (compRewardToken == address(0)) return;
         if (wrappedNative == address(0)) return;
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         rm.setKeeper(keeper);
@@ -605,7 +605,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         if (swapPath.length == 0) return;
         if (wrappedNative == address(0)) return;
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         rm.setKeeper(keeper);
@@ -661,7 +661,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     function test_rewardsModule_aggregators_whitelistable() public {
         address[4] memory aggregators = [ONEINCH_V6, ODOS_V3, PARASWAP_V6, ZEROX_PROXY];
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         uint256 deployed = 0;
         for (uint256 i = 0; i < aggregators.length; i++) {
@@ -684,8 +684,8 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         if (address(compoundStrategy) == address(0)) return;
         if (!_compRewardsActive()) return;
 
-        // 1. Deploy and configure RewardsModule
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        // 1. Deploy and configure RewardsModuleV1_2
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         vault.setRewardsModule(address(rm));
@@ -737,7 +737,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     }
 
     // =========================================================================
-    // RewardsModule: FFI Aggregator Swap Tests (opt-in)
+    // RewardsModuleV1_2: FFI Aggregator Swap Tests (opt-in)
     //
     // These tests call external APIs (1inch, Odos, ParaSwap) via vm.ffi()
     // to get real swap calldata, then execute swaps on a fork.
@@ -750,7 +750,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         if (!vm.envOr("RUN_FFI_TESTS", false)) return;
         if (compRewardToken == address(0)) return;
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         rm.setKeeper(keeper);
@@ -783,7 +783,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         if (!vm.envOr("RUN_FFI_TESTS", false)) return;
         if (compRewardToken == address(0)) return;
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         rm.setKeeper(keeper);
@@ -815,7 +815,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         if (bytes(vm.envOr("ONEINCH_API_KEY", string(""))).length == 0) return;
         if (compRewardToken == address(0)) return;
 
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         rm.setKeeper(keeper);
@@ -847,7 +847,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         if (!_compRewardsActive()) return;
 
         // 1. Deploy and configure
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         vault.setRewardsModule(address(rm));

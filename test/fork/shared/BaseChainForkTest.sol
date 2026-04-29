@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {TezoroV1_1} from "../../../src/TezoroV1_1.sol";
+import {TezoroV1_2} from "../../../src/TezoroV1_2.sol";
 import {IStrategy} from "../../../src/interfaces/IStrategy.sol";
 import {RewardsModuleForkTests} from "./RewardsModuleForkTests.sol";
 
@@ -46,7 +46,7 @@ abstract contract BaseChainForkTest is RewardsModuleForkTests {
         vault.pauseStrategy(IStrategy(address(aaveStrategy)));
 
         vm.prank(guardian);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.unpauseStrategy(IStrategy(address(aaveStrategy)));
     }
 
@@ -59,19 +59,19 @@ abstract contract BaseChainForkTest is RewardsModuleForkTests {
         vault.pauseVault();
 
         vm.prank(guardian);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.unpauseVault();
     }
 
     function test_keeper_cannotPause() public {
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotGuardianOrAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotGuardianOrAdmin.selector);
         vault.pauseVault();
     }
 
     function test_randomUser_cannotPause() public {
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotGuardianOrAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotGuardianOrAdmin.selector);
         vault.pauseVault();
     }
 
@@ -114,7 +114,7 @@ abstract contract BaseChainForkTest is RewardsModuleForkTests {
 
         // Deposits blocked
         vm.prank(bob);
-        vm.expectRevert(TezoroV1_1.VaultIsPaused.selector);
+        vm.expectRevert(TezoroV1_2.VaultIsPaused.selector);
         vault.deposit(depositAmount, bob);
 
         // Withdrawals still work
@@ -147,7 +147,7 @@ abstract contract BaseChainForkTest is RewardsModuleForkTests {
         strats[0] = IStrategy(address(aaveStrategy));
         bps[0] = 3_001;
 
-        vm.expectRevert(TezoroV1_1.AllocationExceedsCap.selector);
+        vm.expectRevert(TezoroV1_2.AllocationExceedsCap.selector);
         vault.rebalance(strats, bps);
         vm.stopPrank();
     }
@@ -313,7 +313,7 @@ abstract contract BaseChainForkTest is RewardsModuleForkTests {
 
     function test_depositCap_onlyAdmin() public {
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setDepositCap(1);
     }
 }

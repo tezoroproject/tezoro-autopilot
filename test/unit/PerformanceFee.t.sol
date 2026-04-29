@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
 
 // ---- Mock ERC-20 ----
@@ -84,7 +84,7 @@ contract PerfFeeStrategy is IStrategy {
 
 contract PerformanceFeeTest is Test {
     PerfFeeUSDC token;
-    TezoroV1_1 vault;
+    TezoroV1_2 vault;
     PerfFeeStrategy strategy;
 
     address admin = makeAddr("admin");
@@ -97,7 +97,7 @@ contract PerformanceFeeTest is Test {
 
     function setUp() public {
         token = new PerfFeeUSDC();
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(address(token)),
             "Tezoro USDC-A",
             "tUSDC-A",
@@ -356,7 +356,7 @@ contract PerformanceFeeTest is Test {
 
         vm.prank(keeper);
         vm.expectEmit(false, false, false, false);
-        emit TezoroV1_1.PerformanceFeeCollected(0, feeRecipient);
+        emit TezoroV1_2.PerformanceFeeCollected(0, feeRecipient);
         vault.collectFees();
     }
 
@@ -523,12 +523,12 @@ contract PerformanceFeeTest is Test {
 
         // Keeper cannot change feeRecipient
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setFeeRecipient(newRecipient);
 
         // Random user cannot change feeRecipient
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setFeeRecipient(newRecipient);
 
         // Admin CAN change feeRecipient
@@ -540,7 +540,7 @@ contract PerformanceFeeTest is Test {
     /// @notice feeRecipient cannot be set to zero address (funds would be lost)
     function test_setFeeRecipient_cannotBeZero() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.ZeroAddress.selector);
+        vm.expectRevert(TezoroV1_2.ZeroAddress.selector);
         vault.setFeeRecipient(address(0));
     }
 
@@ -600,17 +600,17 @@ contract PerformanceFeeTest is Test {
     function test_setPerformanceFee_accessControl() public {
         // Keeper cannot change fee
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setPerformanceFee(2_000);
 
         // Random user cannot change fee
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setPerformanceFee(2_000);
 
         // Cannot exceed MAX_PERFORMANCE_FEE_BPS (30%)
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.InvalidFee.selector);
+        vm.expectRevert(TezoroV1_2.InvalidFee.selector);
         vault.setPerformanceFee(3_001);
 
         // Admin CAN set within cap
@@ -670,7 +670,7 @@ contract PerformanceFeeTest is Test {
         // Bob deposits — should trigger PerformanceFeeCollected
         vm.prank(bob);
         vm.expectEmit(false, false, false, false);
-        emit TezoroV1_1.PerformanceFeeCollected(0, feeRecipient);
+        emit TezoroV1_2.PerformanceFeeCollected(0, feeRecipient);
         vault.deposit(DEPOSIT, bob);
     }
 
@@ -685,7 +685,7 @@ contract PerformanceFeeTest is Test {
 
         vm.prank(bob);
         vm.expectEmit(false, false, false, false);
-        emit TezoroV1_1.PerformanceFeeCollected(0, feeRecipient);
+        emit TezoroV1_2.PerformanceFeeCollected(0, feeRecipient);
         vault.mint(mintShares, bob);
     }
 
@@ -953,11 +953,11 @@ contract PerformanceFeeTest is Test {
 
         // Non-admin cannot propose transfer
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.transferAdmin(newAdmin);
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.transferAdmin(newAdmin);
 
         // Admin proposes transfer (two-step)
@@ -972,7 +972,7 @@ contract PerformanceFeeTest is Test {
 
         // Old admin no longer has access
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setFeeRecipient(alice);
 
         // New admin has access

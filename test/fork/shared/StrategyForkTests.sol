@@ -2,10 +2,10 @@
 pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {AaveV3Strategy} from "../../../src/strategies/AaveV3Strategy.sol";
-import {CompoundV3Strategy} from "../../../src/strategies/CompoundV3Strategy.sol";
-import {MorphoBlueMultiStrategy} from "../../../src/strategies/MorphoBlueMultiStrategy.sol";
-import {FluidStrategy} from "../../../src/strategies/FluidStrategy.sol";
+import {AaveV3StrategyV1_2} from "../../../src/strategies/AaveV3StrategyV1_2.sol";
+import {CompoundV3StrategyV1_2} from "../../../src/strategies/CompoundV3StrategyV1_2.sol";
+import {MorphoBlueMultiStrategyV1_2} from "../../../src/strategies/MorphoBlueMultiStrategyV1_2.sol";
+import {FluidStrategyV1_2} from "../../../src/strategies/FluidStrategyV1_2.sol";
 import {IStrategy} from "../../../src/interfaces/IStrategy.sol";
 import {BaseChainForkSetup} from "./BaseChainForkSetup.sol";
 
@@ -66,7 +66,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     function test_aave_onlyVault() public {
         if (address(aaveStrategy) == address(0)) return;
         vm.prank(makeAddr("attacker"));
-        vm.expectRevert(AaveV3Strategy.NotVault.selector);
+        vm.expectRevert(AaveV3StrategyV1_2.NotVault.selector);
         aaveStrategy.deposit(depositAmount / 100);
     }
 
@@ -122,7 +122,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     function test_compound_onlyVault() public {
         if (address(compoundStrategy) == address(0)) return;
         vm.prank(makeAddr("attacker"));
-        vm.expectRevert(CompoundV3Strategy.NotVault.selector);
+        vm.expectRevert(CompoundV3StrategyV1_2.NotVault.selector);
         compoundStrategy.deposit(depositAmount / 100);
     }
 
@@ -309,7 +309,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     function test_morpho_onlyVault() public {
         if (address(morphoStrategy) == address(0)) return;
         vm.prank(makeAddr("attacker"));
-        vm.expectRevert(MorphoBlueMultiStrategy.NotVault.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotVault.selector);
         morphoStrategy.deposit(depositAmount / 100);
     }
 
@@ -365,7 +365,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     function test_fluid_onlyVault() public {
         if (address(fluidStrategy) == address(0)) return;
         vm.prank(makeAddr("attacker"));
-        vm.expectRevert(FluidStrategy.NotVault.selector);
+        vm.expectRevert(FluidStrategyV1_2.NotVault.selector);
         fluidStrategy.deposit(depositAmount / 100);
     }
 
@@ -409,7 +409,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
         if (address(aaveStrategy) == address(0)) return;
 
         vm.prank(address(vault));
-        vm.expectRevert(AaveV3Strategy.CannotSweepAsset.selector);
+        vm.expectRevert(AaveV3StrategyV1_2.CannotSweepAsset.selector);
         aaveStrategy.sweepReward(token, makeAddr("recipient"));
     }
 
@@ -417,7 +417,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
         if (address(aaveStrategy) == address(0)) return;
 
         vm.prank(makeAddr("attacker"));
-        vm.expectRevert(AaveV3Strategy.NotVault.selector);
+        vm.expectRevert(AaveV3StrategyV1_2.NotVault.selector);
         aaveStrategy.sweepReward(compRewardToken == address(0) ? address(0x1) : compRewardToken, makeAddr("r"));
     }
 

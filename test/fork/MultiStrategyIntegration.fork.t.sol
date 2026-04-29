@@ -4,9 +4,9 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
-import {MorphoBlueMultiStrategy} from "../../src/strategies/MorphoBlueMultiStrategy.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
+import {MorphoBlueMultiStrategyV1_2} from "../../src/strategies/MorphoBlueMultiStrategyV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
 import {IMorpho, MarketParams, Id} from "../../src/interfaces/IMorpho.sol";
 
@@ -26,12 +26,12 @@ bytes32 constant USDC_WBTC_MARKET = 0x3a85e619751152991742810df6ec69ce473daef99e
 // ERC4626 Multi-Strategy Integration Tests
 // ============================================================================
 
-/// @notice Integration tests: TezoroV1_1 + ERC4626MultiStrategy + real MetaMorpho vaults.
+/// @notice Integration tests: TezoroV1_2 + ERC4626MultiStrategyV1_2 + real MetaMorpho vaults.
 contract ERC4626MultiIntegrationTest is Test {
     using SafeERC20 for IERC20;
 
-    TezoroV1_1 vault;
-    ERC4626MultiStrategy multiStrategy;
+    TezoroV1_2 vault;
+    ERC4626MultiStrategyV1_2 multiStrategy;
 
     address admin = makeAddr("admin");
     address keeper = makeAddr("keeper");
@@ -47,7 +47,7 @@ contract ERC4626MultiIntegrationTest is Test {
         vm.createSelectFork("ethereum");
 
         // Deploy vault
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(USDC),
             "Tezoro USDC-A",
             "tUSDC-A",
@@ -58,7 +58,7 @@ contract ERC4626MultiIntegrationTest is Test {
         );
 
         // Deploy multi-strategy with vault as the caller
-        multiStrategy = new ERC4626MultiStrategy(USDC, address(vault), admin, "MetaMorpho Multi", 64, new address[](0));
+        multiStrategy = new ERC4626MultiStrategyV1_2(USDC, address(vault), admin, "MetaMorpho Multi", 64, new address[](0));
 
         // Admin setup: sub-vaults, keeper, register with vault
         vm.startPrank(admin);
@@ -493,12 +493,12 @@ contract ERC4626MultiIntegrationTest is Test {
 // Morpho Blue Multi-Strategy Integration Tests
 // ============================================================================
 
-/// @notice Integration tests: TezoroV1_1 + MorphoBlueMultiStrategy + real Morpho Blue markets.
+/// @notice Integration tests: TezoroV1_2 + MorphoBlueMultiStrategyV1_2 + real Morpho Blue markets.
 contract MorphoBlueMultiIntegrationTest is Test {
     using SafeERC20 for IERC20;
 
-    TezoroV1_1 vault;
-    MorphoBlueMultiStrategy multiStrategy;
+    TezoroV1_2 vault;
+    MorphoBlueMultiStrategyV1_2 multiStrategy;
     IMorpho morpho = IMorpho(MORPHO);
 
     MarketParams mpWstETH;
@@ -526,7 +526,7 @@ contract MorphoBlueMultiIntegrationTest is Test {
         midWBTC = Id.wrap(USDC_WBTC_MARKET);
 
         // Deploy vault
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(USDC),
             "Tezoro USDC-B",
             "tUSDC-B",
@@ -537,7 +537,7 @@ contract MorphoBlueMultiIntegrationTest is Test {
         );
 
         // Deploy multi-strategy
-        multiStrategy = new MorphoBlueMultiStrategy(USDC, MORPHO, address(vault), admin, "Morpho Multi", 64, new MarketParams[](0));
+        multiStrategy = new MorphoBlueMultiStrategyV1_2(USDC, MORPHO, address(vault), admin, "Morpho Multi", 64, new MarketParams[](0));
 
         // Admin setup
         vm.startPrank(admin);

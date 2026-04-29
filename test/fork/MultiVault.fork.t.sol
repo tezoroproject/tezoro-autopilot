@@ -3,13 +3,13 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
-import {AaveV3Strategy} from "../../src/strategies/AaveV3Strategy.sol";
-import {CompoundV3Strategy} from "../../src/strategies/CompoundV3Strategy.sol";
-import {FluidStrategy} from "../../src/strategies/FluidStrategy.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
-import {MorphoBlueMultiStrategy} from "../../src/strategies/MorphoBlueMultiStrategy.sol";
-import {RewardsModule} from "../../src/RewardsModule.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
+import {AaveV3StrategyV1_2} from "../../src/strategies/AaveV3StrategyV1_2.sol";
+import {CompoundV3StrategyV1_2} from "../../src/strategies/CompoundV3StrategyV1_2.sol";
+import {FluidStrategyV1_2} from "../../src/strategies/FluidStrategyV1_2.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
+import {MorphoBlueMultiStrategyV1_2} from "../../src/strategies/MorphoBlueMultiStrategyV1_2.sol";
+import {RewardsModuleV1_2} from "../../src/RewardsModuleV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
 import {IMorpho, MarketParams, Id} from "../../src/interfaces/IMorpho.sol";
 
@@ -58,12 +58,12 @@ contract MultiVaultForkTest is Test {
     uint256 constant USER_BALANCE = 500_000e6;
 
     // --- Deployed state ---
-    TezoroV1_1 vaultA;
-    TezoroV1_1 vaultB;
-    TezoroV1_1 vaultC;
-    RewardsModule rewardsA;
-    RewardsModule rewardsB;
-    RewardsModule rewardsC;
+    TezoroV1_2 vaultA;
+    TezoroV1_2 vaultB;
+    TezoroV1_2 vaultC;
+    RewardsModuleV1_2 rewardsA;
+    RewardsModuleV1_2 rewardsB;
+    RewardsModuleV1_2 rewardsC;
 
     address admin;
     address keeper;
@@ -95,31 +95,31 @@ contract MultiVaultForkTest is Test {
     // -----------------------------------------------------------------------
 
     function _deployVaultA() internal {
-        vaultA = new TezoroV1_1(USDC, "Tezoro USDC-A", "tUSDC-A", admin, feeRecipient, PERFORMANCE_FEE_BPS, IDLE_BUFFER_BPS);
+        vaultA = new TezoroV1_2(USDC, "Tezoro USDC-A", "tUSDC-A", admin, feeRecipient, PERFORMANCE_FEE_BPS, IDLE_BUFFER_BPS);
 
-        AaveV3Strategy aave = new AaveV3Strategy(address(USDC), AAVE_POOL, AAVE_A_USDC, address(vaultA), AAVE_REWARDS);
-        CompoundV3Strategy compound = new CompoundV3Strategy(address(USDC), COMPOUND_USDC, address(vaultA), COMET_REWARDS, COMP);
+        AaveV3StrategyV1_2 aave = new AaveV3StrategyV1_2(address(USDC), AAVE_POOL, AAVE_A_USDC, address(vaultA), AAVE_REWARDS);
+        CompoundV3StrategyV1_2 compound = new CompoundV3StrategyV1_2(address(USDC), COMPOUND_USDC, address(vaultA), COMET_REWARDS, COMP);
 
         address sparkAToken = _getAToken(SPARK_POOL, address(USDC));
-        AaveV3Strategy spark = new AaveV3Strategy(address(USDC), SPARK_POOL, sparkAToken, address(vaultA), SPARK_REWARDS);
+        AaveV3StrategyV1_2 spark = new AaveV3StrategyV1_2(address(USDC), SPARK_POOL, sparkAToken, address(vaultA), SPARK_REWARDS);
 
         vaultA.addStrategy(IStrategy(address(aave)));
         vaultA.addStrategy(IStrategy(address(compound)));
         vaultA.addStrategy(IStrategy(address(spark)));
 
-        rewardsA = new RewardsModule(address(vaultA), admin);
+        rewardsA = new RewardsModuleV1_2(address(vaultA), admin);
         vaultA.setRewardsModule(address(rewardsA));
         vaultA.setKeeper(keeper);
     }
 
     function _deployVaultB() internal {
-        vaultB = new TezoroV1_1(USDC, "Tezoro USDC-B", "tUSDC-B", admin, feeRecipient, PERFORMANCE_FEE_BPS, IDLE_BUFFER_BPS);
+        vaultB = new TezoroV1_2(USDC, "Tezoro USDC-B", "tUSDC-B", admin, feeRecipient, PERFORMANCE_FEE_BPS, IDLE_BUFFER_BPS);
 
-        AaveV3Strategy aave = new AaveV3Strategy(address(USDC), AAVE_POOL, AAVE_A_USDC, address(vaultB), AAVE_REWARDS);
-        CompoundV3Strategy compound = new CompoundV3Strategy(address(USDC), COMPOUND_USDC, address(vaultB), COMET_REWARDS, COMP);
-        FluidStrategy fluid = new FluidStrategy(address(USDC), FLUID_USDC, address(vaultB));
+        AaveV3StrategyV1_2 aave = new AaveV3StrategyV1_2(address(USDC), AAVE_POOL, AAVE_A_USDC, address(vaultB), AAVE_REWARDS);
+        CompoundV3StrategyV1_2 compound = new CompoundV3StrategyV1_2(address(USDC), COMPOUND_USDC, address(vaultB), COMET_REWARDS, COMP);
+        FluidStrategyV1_2 fluid = new FluidStrategyV1_2(address(USDC), FLUID_USDC, address(vaultB));
 
-        ERC4626MultiStrategy erc4626Multi = new ERC4626MultiStrategy(address(USDC), address(vaultB), admin, "MetaMorpho Multi", 64, new address[](0));
+        ERC4626MultiStrategyV1_2 erc4626Multi = new ERC4626MultiStrategyV1_2(address(USDC), address(vaultB), admin, "MetaMorpho Multi", 64, new address[](0));
         erc4626Multi.addSubVault(STEAKHOUSE_USDC);
         erc4626Multi.addSubVault(GAUNTLET_USDC_PRIME);
         erc4626Multi.addSubVault(GAUNTLET_USDC_FRONTIER);
@@ -128,7 +128,7 @@ contract MultiVaultForkTest is Test {
         MarketParams memory mpCbBTC = IMorpho(MORPHO).idToMarketParams(Id.wrap(MORPHO_CBBTC_USDC));
         MarketParams memory mpPAXG = IMorpho(MORPHO).idToMarketParams(Id.wrap(MORPHO_PAXG_USDC));
         MarketParams memory mpWBTC = IMorpho(MORPHO).idToMarketParams(Id.wrap(MORPHO_WBTC_USDC));
-        MorphoBlueMultiStrategy morphoMulti = new MorphoBlueMultiStrategy(address(USDC), MORPHO, address(vaultB), admin, "Morpho Multi", 64, new MarketParams[](0));
+        MorphoBlueMultiStrategyV1_2 morphoMulti = new MorphoBlueMultiStrategyV1_2(address(USDC), MORPHO, address(vaultB), admin, "Morpho Multi", 64, new MarketParams[](0));
         morphoMulti.addMarket(mpCbBTC);
         morphoMulti.addMarket(mpPAXG);
         morphoMulti.addMarket(mpWBTC);
@@ -140,23 +140,23 @@ contract MultiVaultForkTest is Test {
         vaultB.addStrategy(IStrategy(address(erc4626Multi)));
         vaultB.addStrategy(IStrategy(address(morphoMulti)));
 
-        rewardsB = new RewardsModule(address(vaultB), admin);
+        rewardsB = new RewardsModuleV1_2(address(vaultB), admin);
         vaultB.setRewardsModule(address(rewardsB));
         vaultB.setKeeper(keeper);
     }
 
     function _deployVaultC() internal {
-        vaultC = new TezoroV1_1(USDC, "Tezoro USDC", "tUSDC", admin, feeRecipient, PERFORMANCE_FEE_BPS, IDLE_BUFFER_BPS);
+        vaultC = new TezoroV1_2(USDC, "Tezoro USDC", "tUSDC", admin, feeRecipient, PERFORMANCE_FEE_BPS, IDLE_BUFFER_BPS);
 
-        AaveV3Strategy aave = new AaveV3Strategy(address(USDC), AAVE_POOL, AAVE_A_USDC, address(vaultC), AAVE_REWARDS);
-        CompoundV3Strategy compound = new CompoundV3Strategy(address(USDC), COMPOUND_USDC, address(vaultC), COMET_REWARDS, COMP);
+        AaveV3StrategyV1_2 aave = new AaveV3StrategyV1_2(address(USDC), AAVE_POOL, AAVE_A_USDC, address(vaultC), AAVE_REWARDS);
+        CompoundV3StrategyV1_2 compound = new CompoundV3StrategyV1_2(address(USDC), COMPOUND_USDC, address(vaultC), COMET_REWARDS, COMP);
 
         address sparkAToken = _getAToken(SPARK_POOL, address(USDC));
-        AaveV3Strategy spark = new AaveV3Strategy(address(USDC), SPARK_POOL, sparkAToken, address(vaultC), SPARK_REWARDS);
-        FluidStrategy fluid = new FluidStrategy(address(USDC), FLUID_USDC, address(vaultC));
+        AaveV3StrategyV1_2 spark = new AaveV3StrategyV1_2(address(USDC), SPARK_POOL, sparkAToken, address(vaultC), SPARK_REWARDS);
+        FluidStrategyV1_2 fluid = new FluidStrategyV1_2(address(USDC), FLUID_USDC, address(vaultC));
 
         // MetaMorpho multi with same 3 sub-vaults as B (enough for integration test)
-        ERC4626MultiStrategy erc4626Multi = new ERC4626MultiStrategy(address(USDC), address(vaultC), admin, "MetaMorpho Multi", 64, new address[](0));
+        ERC4626MultiStrategyV1_2 erc4626Multi = new ERC4626MultiStrategyV1_2(address(USDC), address(vaultC), admin, "MetaMorpho Multi", 64, new address[](0));
         erc4626Multi.addSubVault(STEAKHOUSE_USDC);
         erc4626Multi.addSubVault(GAUNTLET_USDC_PRIME);
         erc4626Multi.addSubVault(GAUNTLET_USDC_FRONTIER);
@@ -166,7 +166,7 @@ contract MultiVaultForkTest is Test {
         MarketParams memory mpCbBTC = IMorpho(MORPHO).idToMarketParams(Id.wrap(MORPHO_CBBTC_USDC));
         MarketParams memory mpPAXG = IMorpho(MORPHO).idToMarketParams(Id.wrap(MORPHO_PAXG_USDC));
         MarketParams memory mpWBTC = IMorpho(MORPHO).idToMarketParams(Id.wrap(MORPHO_WBTC_USDC));
-        MorphoBlueMultiStrategy morphoMulti = new MorphoBlueMultiStrategy(address(USDC), MORPHO, address(vaultC), admin, "Morpho Multi", 64, new MarketParams[](0));
+        MorphoBlueMultiStrategyV1_2 morphoMulti = new MorphoBlueMultiStrategyV1_2(address(USDC), MORPHO, address(vaultC), admin, "Morpho Multi", 64, new MarketParams[](0));
         morphoMulti.addMarket(mpCbBTC);
         morphoMulti.addMarket(mpPAXG);
         morphoMulti.addMarket(mpWBTC);
@@ -179,7 +179,7 @@ contract MultiVaultForkTest is Test {
         vaultC.addStrategy(IStrategy(address(erc4626Multi)));
         vaultC.addStrategy(IStrategy(address(morphoMulti)));
 
-        rewardsC = new RewardsModule(address(vaultC), admin);
+        rewardsC = new RewardsModuleV1_2(address(vaultC), admin);
         vaultC.setRewardsModule(address(rewardsC));
         vaultC.setKeeper(keeper);
     }
@@ -556,7 +556,7 @@ contract MultiVaultForkTest is Test {
     }
 
     /// @dev Set equal allocation across all strategies (excluding idle buffer)
-    function _rebalanceWithEqualAlloc(TezoroV1_1 vault) internal {
+    function _rebalanceWithEqualAlloc(TezoroV1_2 vault) internal {
         IStrategy[] memory strats = vault.getStrategies();
         uint256 perStrategy = (10_000 - IDLE_BUFFER_BPS) / strats.length;
         uint256[] memory bps = new uint256[](strats.length);
@@ -566,7 +566,7 @@ contract MultiVaultForkTest is Test {
         vault.rebalance(strats, bps);
     }
 
-    function _assertAllHealthy(TezoroV1_1 vault, string memory label) internal view {
+    function _assertAllHealthy(TezoroV1_2 vault, string memory label) internal view {
         IStrategy[] memory strats = vault.getStrategies();
         for (uint256 i = 0; i < strats.length; i++) {
             assertTrue(strats[i].isHealthy(), string.concat(label, ": strategy ", vm.toString(i), " healthy"));

@@ -5,8 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
-import {RewardsModule} from "../../src/RewardsModule.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
+import {RewardsModuleV1_2} from "../../src/RewardsModuleV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
 import {MockUSDCToken, MockRewardToken, MockStrategy, MockDexRouter, MerkleHelper} from "./shared/RewardsModuleTestBase.sol";
 
@@ -129,8 +129,8 @@ contract RewardsModuleEigenMorphoTest is Test {
     MockUSDCToken usdc;
     MockRewardToken morpho;
     MockRewardToken eigen;
-    TezoroV1_1 vault;
-    RewardsModule module;
+    TezoroV1_2 vault;
+    RewardsModuleV1_2 module;
     MockStrategy strategy;
     MockDexRouter router;
 
@@ -146,12 +146,12 @@ contract RewardsModuleEigenMorphoTest is Test {
         eigen = new MockRewardToken("EigenLayer", "EIGEN");
         router = new MockDexRouter(address(usdc));
 
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(address(usdc)), "Tezoro USDC-A", "tUSDC-A",
             admin, makeAddr("feeRecipient"), 1_500, 300
         );
 
-        module = new RewardsModule(address(vault), admin);
+        module = new RewardsModuleV1_2(address(vault), admin);
         strategy = new MockStrategy(address(usdc));
 
         vm.startPrank(admin);
@@ -294,7 +294,7 @@ contract RewardsModuleEigenMorphoTest is Test {
         });
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.ClaimFailed.selector);
+        vm.expectRevert(RewardsModuleV1_2.ClaimFailed.selector);
         module.executeClaim(
             address(distributor),
             abi.encodeCall(EigenLayerStyleDistributor.processClaim, (claim, address(module)))

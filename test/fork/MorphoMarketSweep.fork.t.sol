@@ -4,14 +4,14 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {MorphoBlueMultiStrategy} from "../../src/strategies/MorphoBlueMultiStrategy.sol";
+import {MorphoBlueMultiStrategyV1_2} from "../../src/strategies/MorphoBlueMultiStrategyV1_2.sol";
 import {IMorpho, MarketParams, MorphoMarket, Position, Id} from "../../src/interfaces/IMorpho.sol";
 
 // Real Ethereum mainnet addresses
 address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 address constant MORPHO = 0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb;
 
-/// @notice Sweep test: validates MorphoBlueMultiStrategy against a diverse set of real Morpho Blue markets.
+/// @notice Sweep test: validates MorphoBlueMultiStrategyV1_2 against a diverse set of real Morpho Blue markets.
 ///         Covers different sizes, utilization levels, LLTVs, and collateral types.
 contract MorphoMarketSweepTest is Test {
     using SafeERC20 for IERC20;
@@ -21,7 +21,7 @@ contract MorphoMarketSweepTest is Test {
         string label;
     }
 
-    MorphoBlueMultiStrategy strategy;
+    MorphoBlueMultiStrategyV1_2 strategy;
     IMorpho morpho = IMorpho(MORPHO);
 
     address vaultAddr = makeAddr("vault");
@@ -44,7 +44,7 @@ contract MorphoMarketSweepTest is Test {
     function setUp() public {
         vm.createSelectFork("ethereum");
 
-        strategy = new MorphoBlueMultiStrategy(USDC, MORPHO, vaultAddr, adminAddr, "Morpho Sweep", 64, new MarketParams[](0));
+        strategy = new MorphoBlueMultiStrategyV1_2(USDC, MORPHO, vaultAddr, adminAddr, "Morpho Sweep", 64, new MarketParams[](0));
 
         vm.startPrank(adminAddr);
         strategy.setKeeper(keeperAddr);
@@ -362,7 +362,7 @@ contract MorphoMarketSweepTest is Test {
 
         // Allocate to frozen market should revert
         vm.prank(keeperAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.DepositsFrozen.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.DepositsFrozen.selector);
         strategy.allocate(mid, 1e6);
     }
 
@@ -380,7 +380,7 @@ contract MorphoMarketSweepTest is Test {
 
         // Allocate should revert
         vm.prank(keeperAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.DepositsFrozen.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.DepositsFrozen.selector);
         strategy.allocate(mid, 10_000e6);
 
         // Unfreeze
@@ -407,7 +407,7 @@ contract MorphoMarketSweepTest is Test {
 
         // Can't remove with active position
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.MarketHasActivePosition.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.MarketHasActivePosition.selector);
         strategy.removeMarket(mid);
 
         // Recall first

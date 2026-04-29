@@ -7,8 +7,8 @@ import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.so
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
-import {MorphoBlueMultiStrategy} from "../../src/strategies/MorphoBlueMultiStrategy.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
+import {MorphoBlueMultiStrategyV1_2} from "../../src/strategies/MorphoBlueMultiStrategyV1_2.sol";
 import {IMorpho, MarketParams, MorphoMarket, Position, Id} from "../../src/interfaces/IMorpho.sol";
 
 // ---- Mock ERC-20 ----
@@ -152,7 +152,7 @@ contract ERC4626MultiFreezeTest is Test {
     MockToken token;
     MockVault4626 subVaultA;
     MockVault4626 subVaultB;
-    ERC4626MultiStrategy strategy;
+    ERC4626MultiStrategyV1_2 strategy;
 
     address vaultAddr;
     address adminAddr;
@@ -169,7 +169,7 @@ contract ERC4626MultiFreezeTest is Test {
         subVaultA = new MockVault4626(IERC20(address(token)));
         subVaultB = new MockVault4626(IERC20(address(token)));
 
-        strategy = new ERC4626MultiStrategy(address(token), vaultAddr, adminAddr, "ERC4626 Multi", 64, new address[](0));
+        strategy = new ERC4626MultiStrategyV1_2(address(token), vaultAddr, adminAddr, "ERC4626 Multi", 64, new address[](0));
 
         vm.startPrank(adminAddr);
         strategy.setKeeper(keeperAddr);
@@ -190,7 +190,7 @@ contract ERC4626MultiFreezeTest is Test {
 
     function test_freezeSubVaultDeposits_emitsEvent() public {
         vm.expectEmit(true, false, false, false);
-        emit ERC4626MultiStrategy.SubVaultDepositFrozen(address(subVaultA));
+        emit ERC4626MultiStrategyV1_2.SubVaultDepositFrozen(address(subVaultA));
 
         vm.prank(adminAddr);
         strategy.freezeSubVaultDeposits(address(subVaultA));
@@ -198,13 +198,13 @@ contract ERC4626MultiFreezeTest is Test {
 
     function test_freezeSubVaultDeposits_revertsIfNotAdmin() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotAdmin.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotAdmin.selector);
         strategy.freezeSubVaultDeposits(address(subVaultA));
     }
 
     function test_freezeSubVaultDeposits_revertsIfNotApproved() public {
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultNotApproved.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultNotApproved.selector);
         strategy.freezeSubVaultDeposits(makeAddr("unknown"));
     }
 
@@ -212,7 +212,7 @@ contract ERC4626MultiFreezeTest is Test {
         vm.startPrank(adminAddr);
         strategy.freezeSubVaultDeposits(address(subVaultA));
 
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultAlreadyDepositFrozen.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultAlreadyDepositFrozen.selector);
         strategy.freezeSubVaultDeposits(address(subVaultA));
         vm.stopPrank();
     }
@@ -233,7 +233,7 @@ contract ERC4626MultiFreezeTest is Test {
         strategy.freezeSubVaultDeposits(address(subVaultA));
 
         vm.expectEmit(true, false, false, false);
-        emit ERC4626MultiStrategy.SubVaultDepositUnfrozen(address(subVaultA));
+        emit ERC4626MultiStrategyV1_2.SubVaultDepositUnfrozen(address(subVaultA));
 
         vm.prank(adminAddr);
         strategy.unfreezeSubVaultDeposits(address(subVaultA));
@@ -241,7 +241,7 @@ contract ERC4626MultiFreezeTest is Test {
 
     function test_unfreezeSubVaultDeposits_revertsIfNotFrozen() public {
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultNotDepositFrozen.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultNotDepositFrozen.selector);
         strategy.unfreezeSubVaultDeposits(address(subVaultA));
     }
 
@@ -256,7 +256,7 @@ contract ERC4626MultiFreezeTest is Test {
         strategy.freezeSubVaultDeposits(address(subVaultA));
 
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.DepositsFrozen.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.DepositsFrozen.selector);
         strategy.allocate(address(subVaultA), 500e6);
     }
 
@@ -328,7 +328,7 @@ contract ERC4626MultiFreezeTest is Test {
         strategy.allocate(address(subVaultA), 600e6);
 
         vm.expectEmit(true, false, false, false);
-        emit ERC4626MultiStrategy.SubVaultDepositFrozen(address(subVaultA));
+        emit ERC4626MultiStrategyV1_2.SubVaultDepositFrozen(address(subVaultA));
 
         vm.prank(adminAddr);
         strategy.recallSubVault(address(subVaultA));
@@ -336,13 +336,13 @@ contract ERC4626MultiFreezeTest is Test {
 
     function test_recallSubVault_revertsIfNotAdmin() public {
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.NotAdmin.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotAdmin.selector);
         strategy.recallSubVault(address(subVaultA));
     }
 
     function test_recallSubVault_revertsIfNotApproved() public {
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultNotApproved.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultNotApproved.selector);
         strategy.recallSubVault(makeAddr("unknown"));
     }
 
@@ -398,7 +398,7 @@ contract ERC4626MultiFreezeTest is Test {
 contract MorphoBlueMultiFreezeTest is Test {
     MockToken token;
     MockMorpho mockMorpho;
-    MorphoBlueMultiStrategy strategy;
+    MorphoBlueMultiStrategyV1_2 strategy;
 
     MarketParams mpA;
     MarketParams mpB;
@@ -419,7 +419,7 @@ contract MorphoBlueMultiFreezeTest is Test {
         token = new MockToken("USD Coin", "USDC", 6);
         mockMorpho = new MockMorpho();
 
-        strategy = new MorphoBlueMultiStrategy(
+        strategy = new MorphoBlueMultiStrategyV1_2(
             address(token),
             address(mockMorpho),
             vaultAddr,
@@ -466,7 +466,7 @@ contract MorphoBlueMultiFreezeTest is Test {
 
     function test_freezeMarketDeposits_emitsEvent() public {
         vm.expectEmit(true, false, false, false);
-        emit MorphoBlueMultiStrategy.MarketDepositFrozen(midA);
+        emit MorphoBlueMultiStrategyV1_2.MarketDepositFrozen(midA);
 
         vm.prank(adminAddr);
         strategy.freezeMarketDeposits(midA);
@@ -474,14 +474,14 @@ contract MorphoBlueMultiFreezeTest is Test {
 
     function test_freezeMarketDeposits_revertsIfNotAdmin() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotAdmin.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotAdmin.selector);
         strategy.freezeMarketDeposits(midA);
     }
 
     function test_freezeMarketDeposits_revertsIfNotApproved() public {
         Id unknown = Id.wrap(bytes32(uint256(999)));
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.MarketNotApproved.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.MarketNotApproved.selector);
         strategy.freezeMarketDeposits(unknown);
     }
 
@@ -489,7 +489,7 @@ contract MorphoBlueMultiFreezeTest is Test {
         vm.startPrank(adminAddr);
         strategy.freezeMarketDeposits(midA);
 
-        vm.expectRevert(MorphoBlueMultiStrategy.MarketAlreadyDepositFrozen.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.MarketAlreadyDepositFrozen.selector);
         strategy.freezeMarketDeposits(midA);
         vm.stopPrank();
     }
@@ -507,7 +507,7 @@ contract MorphoBlueMultiFreezeTest is Test {
 
     function test_unfreezeMarketDeposits_revertsIfNotFrozen() public {
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.MarketNotDepositFrozen.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.MarketNotDepositFrozen.selector);
         strategy.unfreezeMarketDeposits(midA);
     }
 
@@ -522,7 +522,7 @@ contract MorphoBlueMultiFreezeTest is Test {
         strategy.freezeMarketDeposits(midA);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.DepositsFrozen.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.DepositsFrozen.selector);
         strategy.allocate(midA, 500e6);
     }
 
@@ -594,7 +594,7 @@ contract MorphoBlueMultiFreezeTest is Test {
         strategy.allocate(midA, 600e6);
 
         vm.expectEmit(true, false, false, false);
-        emit MorphoBlueMultiStrategy.MarketDepositFrozen(midA);
+        emit MorphoBlueMultiStrategyV1_2.MarketDepositFrozen(midA);
 
         vm.prank(adminAddr);
         strategy.recallMarket(midA);
@@ -602,7 +602,7 @@ contract MorphoBlueMultiFreezeTest is Test {
 
     function test_recallMarket_revertsIfNotAdmin() public {
         vm.prank(keeperAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotAdmin.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotAdmin.selector);
         strategy.recallMarket(midA);
     }
 

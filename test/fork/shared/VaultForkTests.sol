@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../../src/TezoroV1_1.sol";
+import {TezoroV1_2} from "../../../src/TezoroV1_2.sol";
 import {IStrategy} from "../../../src/interfaces/IStrategy.sol";
 import {StrategyForkTests} from "./StrategyForkTests.sol";
 
@@ -210,7 +210,7 @@ abstract contract VaultForkTests is StrategyForkTests {
         vault.pauseVault();
 
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.VaultIsPaused.selector);
+        vm.expectRevert(TezoroV1_2.VaultIsPaused.selector);
         vault.deposit(depositAmount, alice);
     }
 
@@ -233,7 +233,7 @@ abstract contract VaultForkTests is StrategyForkTests {
 
     function test_vault_addStrategy_reverts_notAdmin() public {
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.addStrategy(IStrategy(address(aaveStrategy)));
     }
 
@@ -241,7 +241,7 @@ abstract contract VaultForkTests is StrategyForkTests {
         if (address(aaveStrategy) == address(0)) return;
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyAlreadyActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyAlreadyActive.selector);
         vault.addStrategy(IStrategy(address(aaveStrategy)));
     }
 
@@ -256,19 +256,19 @@ abstract contract VaultForkTests is StrategyForkTests {
         assertEq(vault.admin(), alice);
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.NotGuardianOrAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotGuardianOrAdmin.selector);
         vault.pauseVault();
     }
 
     function test_vault_randomUser_cannotRebalance() public {
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotAdminOrKeeper.selector);
+        vm.expectRevert(TezoroV1_2.NotAdminOrKeeper.selector);
         vault.rebalance();
     }
 
     function test_vault_keeper_cannotAddStrategy() public {
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.addStrategy(IStrategy(address(aaveStrategy)));
     }
 
@@ -284,7 +284,7 @@ abstract contract VaultForkTests is StrategyForkTests {
 
     function test_vault_setPerformanceFee_reverts_tooHigh() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.InvalidFee.selector);
+        vm.expectRevert(TezoroV1_2.InvalidFee.selector);
         vault.setPerformanceFee(4_000);
     }
 
@@ -296,7 +296,7 @@ abstract contract VaultForkTests is StrategyForkTests {
 
     function test_vault_setFeeRecipient_reverts_zero() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.ZeroAddress.selector);
+        vm.expectRevert(TezoroV1_2.ZeroAddress.selector);
         vault.setFeeRecipient(address(0));
     }
 
@@ -317,7 +317,7 @@ abstract contract VaultForkTests is StrategyForkTests {
 
     function test_vault_setIdleBuffer_reverts_tooHigh() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.InvalidBuffer.selector);
+        vm.expectRevert(TezoroV1_2.InvalidBuffer.selector);
         vault.setIdleBuffer(3_000);
     }
 
@@ -398,7 +398,7 @@ abstract contract VaultForkTests is StrategyForkTests {
         vault.setRewardsModule(rewardsAddr);
 
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotRewardsModule.selector);
+        vm.expectRevert(TezoroV1_2.NotRewardsModule.selector);
         vault.depositRewards(depositAmount / 100);
     }
 

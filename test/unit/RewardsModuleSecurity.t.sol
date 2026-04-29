@@ -4,18 +4,18 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
-import {RewardsModule} from "../../src/RewardsModule.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
+import {RewardsModuleV1_2} from "../../src/RewardsModuleV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
 import {MockUSDCToken, MockRewardToken, MockStrategy, MockDexRouter} from "./shared/RewardsModuleTestBase.sol";
 
 // ---- Reentrancy attack contracts ----
 
-/// @dev Router that tries to reenter RewardsModule.swap() during a swap
+/// @dev Router that tries to reenter RewardsModuleV1_2.swap() during a swap
 contract ReentrantRouter {
     using SafeERC20 for IERC20;
 
-    RewardsModule public target;
+    RewardsModuleV1_2 public target;
     address public usdc;
     address public rwd;
 
@@ -24,11 +24,11 @@ contract ReentrantRouter {
         rwd = rwd_;
     }
 
-    function setTarget(RewardsModule target_) external {
+    function setTarget(RewardsModuleV1_2 target_) external {
         target = target_;
     }
 
-    /// @dev Called during RewardsModule.swap() — tries to reenter swap
+    /// @dev Called during RewardsModuleV1_2.swap() — tries to reenter swap
     function doSwap(address tokenIn, uint256 amountIn) external {
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
 
@@ -46,14 +46,14 @@ contract ReentrantRouter {
 contract ReentrantSweepRouter {
     using SafeERC20 for IERC20;
 
-    RewardsModule public target;
+    RewardsModuleV1_2 public target;
     address public usdc;
 
     constructor(address usdc_) {
         usdc = usdc_;
     }
 
-    function setTarget(RewardsModule target_) external {
+    function setTarget(RewardsModuleV1_2 target_) external {
         target = target_;
     }
 
@@ -68,10 +68,10 @@ contract ReentrantSweepRouter {
 
 /// @dev Claim target that tries to reenter executeClaim
 contract ReentrantClaimTarget {
-    RewardsModule public target;
+    RewardsModuleV1_2 public target;
     bool public attacked;
 
-    function setTarget(RewardsModule target_) external {
+    function setTarget(RewardsModuleV1_2 target_) external {
         target = target_;
     }
 
@@ -91,10 +91,10 @@ contract ReentrantClaimTarget {
 contract ReentrantSwapClaimTarget {
     using SafeERC20 for IERC20;
 
-    RewardsModule public target;
+    RewardsModuleV1_2 public target;
     address public router;
 
-    function setTarget(RewardsModule target_, address router_) external {
+    function setTarget(RewardsModuleV1_2 target_, address router_) external {
         target = target_;
         router = router_;
     }
@@ -150,8 +150,8 @@ contract FailingRouter {
 contract RewardsModuleSecurityTest is Test {
     MockUSDCToken usdc;
     MockRewardToken rwd;
-    TezoroV1_1 vault;
-    RewardsModule module;
+    TezoroV1_2 vault;
+    RewardsModuleV1_2 module;
     MockStrategy strategy;
     MockDexRouter router;
 
@@ -167,7 +167,7 @@ contract RewardsModuleSecurityTest is Test {
         rwd = new MockRewardToken("Reward Token", "RWD");
         router = new MockDexRouter(address(usdc));
 
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(address(usdc)),
             "Tezoro USDC-A",
             "tUSDC-A",
@@ -177,7 +177,7 @@ contract RewardsModuleSecurityTest is Test {
             300
         );
 
-        module = new RewardsModule(address(vault), admin);
+        module = new RewardsModuleV1_2(address(vault), admin);
         strategy = new MockStrategy(address(usdc));
 
         vm.startPrank(admin);
@@ -307,7 +307,7 @@ contract RewardsModuleSecurityTest is Test {
 
         // Code-size check catches EOA before whitelist check
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.TargetHasNoCode.selector);
+        vm.expectRevert(RewardsModuleV1_2.TargetHasNoCode.selector);
         module.executeClaim(
             eoaTarget,
             abi.encodeWithSelector(fakeSelector, address(module), 100)
@@ -355,7 +355,7 @@ contract RewardsModuleSecurityTest is Test {
         rwd.mint(address(module), 100e18);
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.SwapCallFailed.selector);
+        vm.expectRevert(RewardsModuleV1_2.SwapCallFailed.selector);
         module.swap(
             address(failRouter), address(rwd), address(usdc), 100e18, 0,
             abi.encodeCall(FailingRouter.doSwap, (address(rwd), 100e18))
@@ -392,13 +392,13 @@ contract RewardsModuleSecurityTest is Test {
         usdc.mint(address(module), 1_000e6);
 
         vm.prank(admin);
-        vm.expectRevert(RewardsModule.CannotRescueBaseAsset.selector);
+        vm.expectRevert(RewardsModuleV1_2.CannotRescueBaseAsset.selector);
         module.rescueToken(address(usdc), admin, 1_000e6);
     }
 
     function test_invariant_baseAssetCannotBeSwapped() public {
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.CannotSwapBaseAsset.selector);
+        vm.expectRevert(RewardsModuleV1_2.CannotSwapBaseAsset.selector);
         module.swap(
             address(router), address(usdc), address(usdc), 100e6, 0,
             abi.encodeCall(MockDexRouter.doSwap, (address(usdc), 100e6))
@@ -441,7 +441,7 @@ contract RewardsModuleSecurityTest is Test {
 
         // Attacker cannot accept anymore
         vm.prank(attacker);
-        vm.expectRevert(RewardsModule.NotPendingAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotPendingAdmin.selector);
         module.acceptAdmin();
 
         // Safe admin can accept
@@ -465,7 +465,7 @@ contract RewardsModuleSecurityTest is Test {
 
         // Keeper cannot sweep
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.NotAdminOrKeeper.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdminOrKeeper.selector);
         module.sweepToVault();
 
         // Admin can still sweep
@@ -562,7 +562,7 @@ contract RewardsModuleSecurityTest is Test {
 
         // Now reverts
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.TargetNotWhitelisted.selector);
+        vm.expectRevert(RewardsModuleV1_2.TargetNotWhitelisted.selector);
         module.executeClaim(address(target), abi.encodeCall(EmptyClaimTarget.claim, (address(0), 0)));
     }
 
@@ -576,7 +576,7 @@ contract RewardsModuleSecurityTest is Test {
         module.setRouterWhitelist(address(router), false);
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.RouterNotWhitelisted.selector);
+        vm.expectRevert(RewardsModuleV1_2.RouterNotWhitelisted.selector);
         module.swap(
             address(router), address(rwd), address(usdc), 100e18, 100e6,
             abi.encodeCall(MockDexRouter.doSwap, (address(rwd), 100e18))
@@ -584,7 +584,7 @@ contract RewardsModuleSecurityTest is Test {
     }
 
     // =========================================================================
-    // 15. depositRewards access control: only RewardsModule can call
+    // 15. depositRewards access control: only RewardsModuleV1_2 can call
     // =========================================================================
 
     function test_depositRewards_onlyRewardsModule() public {
@@ -594,7 +594,7 @@ contract RewardsModuleSecurityTest is Test {
 
         // Random user cannot deposit rewards
         vm.prank(bob);
-        vm.expectRevert(TezoroV1_1.NotRewardsModule.selector);
+        vm.expectRevert(TezoroV1_2.NotRewardsModule.selector);
         vault.depositRewards(1_000e6);
 
         // Admin cannot deposit rewards
@@ -602,7 +602,7 @@ contract RewardsModuleSecurityTest is Test {
         vm.prank(admin);
         usdc.approve(address(vault), 1_000e6);
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.NotRewardsModule.selector);
+        vm.expectRevert(TezoroV1_2.NotRewardsModule.selector);
         vault.depositRewards(1_000e6);
 
         // Keeper cannot deposit rewards
@@ -610,7 +610,7 @@ contract RewardsModuleSecurityTest is Test {
         vm.prank(keeper);
         usdc.approve(address(vault), 1_000e6);
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotRewardsModule.selector);
+        vm.expectRevert(TezoroV1_2.NotRewardsModule.selector);
         vault.depositRewards(1_000e6);
     }
 
@@ -662,7 +662,7 @@ contract RewardsModuleSecurityTest is Test {
         module.pause();
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.IsPaused.selector);
+        vm.expectRevert(RewardsModuleV1_2.IsPaused.selector);
         module.executeClaim(address(target), abi.encodeCall(EmptyClaimTarget.claim, (address(0), 0)));
     }
 
@@ -671,7 +671,7 @@ contract RewardsModuleSecurityTest is Test {
         module.pause();
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.IsPaused.selector);
+        vm.expectRevert(RewardsModuleV1_2.IsPaused.selector);
         module.swap(address(router), address(rwd), address(usdc), 1, 0, hex"");
     }
 
@@ -682,7 +682,7 @@ contract RewardsModuleSecurityTest is Test {
         module.pause();
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.IsPaused.selector);
+        vm.expectRevert(RewardsModuleV1_2.IsPaused.selector);
         module.sweepToVault();
     }
 
@@ -709,7 +709,7 @@ contract RewardsModuleSecurityTest is Test {
 
         // Blocked
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.IsPaused.selector);
+        vm.expectRevert(RewardsModuleV1_2.IsPaused.selector);
         module.sweepToVault();
 
         // Unpause
@@ -724,11 +724,11 @@ contract RewardsModuleSecurityTest is Test {
 
     function test_pause_onlyAdmin() public {
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         module.pause();
 
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         module.pause();
     }
 
@@ -737,7 +737,7 @@ contract RewardsModuleSecurityTest is Test {
         module.pause();
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         module.unpause();
     }
 }
@@ -749,8 +749,8 @@ contract RewardsModuleSecurityTest is Test {
 contract RewardsModuleFuzzTest is Test {
     MockUSDCToken usdc;
     MockRewardToken rwd;
-    TezoroV1_1 vault;
-    RewardsModule module;
+    TezoroV1_2 vault;
+    RewardsModuleV1_2 module;
     MockStrategy strategy;
     MockDexRouter router;
 
@@ -763,7 +763,7 @@ contract RewardsModuleFuzzTest is Test {
         rwd = new MockRewardToken("Reward Token", "RWD");
         router = new MockDexRouter(address(usdc));
 
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(address(usdc)),
             "Tezoro USDC-A",
             "tUSDC-A",
@@ -773,7 +773,7 @@ contract RewardsModuleFuzzTest is Test {
             300
         );
 
-        module = new RewardsModule(address(vault), admin);
+        module = new RewardsModuleV1_2(address(vault), admin);
         strategy = new MockStrategy(address(usdc));
 
         vm.startPrank(admin);
@@ -808,7 +808,7 @@ contract RewardsModuleFuzzTest is Test {
 
         if (actualOut < minOut) {
             vm.prank(keeper);
-            vm.expectRevert(RewardsModule.SlippageExceeded.selector);
+            vm.expectRevert(RewardsModuleV1_2.SlippageExceeded.selector);
             module.swap(address(router), address(rwd), address(usdc), rwdAmount, minOut, swapData);
         } else {
             vm.prank(keeper);
@@ -888,42 +888,42 @@ contract RewardsModuleFuzzTest is Test {
 
         // executeClaim
         vm.prank(caller);
-        vm.expectRevert(RewardsModule.NotAdminOrKeeper.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdminOrKeeper.selector);
         module.executeClaim(address(0x1), abi.encodeWithSignature("claim()"));
 
         // swap
         vm.prank(caller);
-        vm.expectRevert(RewardsModule.NotAdminOrKeeper.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdminOrKeeper.selector);
         module.swap(address(router), address(rwd), address(usdc), 1, 0, hex"");
 
         // sweepToVault
         vm.prank(caller);
-        vm.expectRevert(RewardsModule.NotAdminOrKeeper.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdminOrKeeper.selector);
         module.sweepToVault();
 
         // setClaimWhitelist
         vm.prank(caller);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         module.setClaimWhitelist(address(0x1), bytes4(0), true);
 
         // setRouterWhitelist
         vm.prank(caller);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         module.setRouterWhitelist(address(0x1), true);
 
         // transferAdmin
         vm.prank(caller);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         module.transferAdmin(makeAddr("newAdmin"));
 
         // setKeeper
         vm.prank(caller);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         module.setKeeper(makeAddr("newKeeper"));
 
         // rescueToken
         vm.prank(caller);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         module.rescueToken(address(rwd), caller, 1);
     }
 }

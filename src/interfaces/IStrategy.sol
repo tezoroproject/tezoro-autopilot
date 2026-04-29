@@ -44,7 +44,7 @@ interface IStrategy {
     ///         Used for merkle-claimed rewards (Morpho URD, Merkl, etc.) that land
     ///         on the strategy address after an external claim.
     /// @param rewardToken The ERC-20 token to sweep (must NOT be the strategy's asset)
-    /// @param to Recipient address (typically the RewardsModule)
+    /// @param to Recipient address (typically the RewardsModuleV1_2)
     /// @return amount Amount of tokens swept
     function sweepReward(address rewardToken, address to) external returns (uint256 amount);
 }

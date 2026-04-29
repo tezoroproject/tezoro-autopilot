@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {MorphoBlueMultiStrategy} from "../../src/strategies/MorphoBlueMultiStrategy.sol";
+import {MorphoBlueMultiStrategyV1_2} from "../../src/strategies/MorphoBlueMultiStrategyV1_2.sol";
 import {IMorpho, MarketParams, MorphoMarket, Position, Id} from "../../src/interfaces/IMorpho.sol";
 
 address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
@@ -15,12 +15,12 @@ bytes32 constant USDC_WSTETH_MARKET = 0xb323495f7e4148be5643a4ea4a8221eef163e4bc
 bytes32 constant USDC_WBTC_MARKET = 0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49;
 bytes32 constant USDC_CBBTC_MARKET = 0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64;
 
-/// @notice Fuzz tests for MorphoBlueMultiStrategy on Ethereum mainnet fork.
+/// @notice Fuzz tests for MorphoBlueMultiStrategyV1_2 on Ethereum mainnet fork.
 ///         Tests properties that must hold for ANY valid input amount.
 contract MorphoStrategyFuzz is Test {
     using SafeERC20 for IERC20;
 
-    MorphoBlueMultiStrategy strategy;
+    MorphoBlueMultiStrategyV1_2 strategy;
     IMorpho morpho = IMorpho(MORPHO);
 
     Id midA;
@@ -36,7 +36,7 @@ contract MorphoStrategyFuzz is Test {
     function setUp() public {
         vm.createSelectFork("ethereum");
 
-        strategy = new MorphoBlueMultiStrategy(USDC, MORPHO, vaultAddr, adminAddr, "Morpho Fuzz", 64, new MarketParams[](0));
+        strategy = new MorphoBlueMultiStrategyV1_2(USDC, MORPHO, vaultAddr, adminAddr, "Morpho Fuzz", 64, new MarketParams[](0));
 
         midA = Id.wrap(USDC_WSTETH_MARKET);
         midB = Id.wrap(USDC_WBTC_MARKET);
@@ -347,7 +347,7 @@ contract MorphoStrategyFuzz is Test {
         strategy.deposit(deposit);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.InsufficientIdle.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.InsufficientIdle.selector);
         strategy.allocate(midA, deposit + extra);
     }
 
@@ -473,7 +473,7 @@ contract MorphoStrategyFuzz is Test {
 
         // Allocate to frozen market should revert
         vm.prank(keeperAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.DepositsFrozen.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.DepositsFrozen.selector);
         strategy.allocate(midA, 1e6);
 
         // Unfreeze market

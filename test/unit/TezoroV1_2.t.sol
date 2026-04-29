@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
 
 // ---- Mock ERC-20 ----
@@ -138,9 +138,9 @@ contract MockRewardToken is ERC20 {
 
 // ---- Tests ----
 
-contract TezoroV1_1Test is Test {
+contract TezoroV1_2Test is Test {
     V1TestUSDC token;
-    TezoroV1_1 vault;
+    TezoroV1_2 vault;
     V1TestStrategy strategyA;
     V1TestStrategy strategyB;
     MockRewardToken rewardToken;
@@ -159,7 +159,7 @@ contract TezoroV1_1Test is Test {
         token = new V1TestUSDC();
         rewardToken = new MockRewardToken();
 
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(address(token)),
             "Tezoro USDC-A",
             "tUSDC-A",
@@ -193,23 +193,23 @@ contract TezoroV1_1Test is Test {
     // =========================================================================
 
     function test_constructor_reverts_zeroAdmin() public {
-        vm.expectRevert(TezoroV1_1.ZeroAddress.selector);
-        new TezoroV1_1(IERC20(address(token)), "V", "V", address(0), feeRecipient, 0, 0);
+        vm.expectRevert(TezoroV1_2.ZeroAddress.selector);
+        new TezoroV1_2(IERC20(address(token)), "V", "V", address(0), feeRecipient, 0, 0);
     }
 
     function test_constructor_reverts_zeroFeeRecipient() public {
-        vm.expectRevert(TezoroV1_1.ZeroAddress.selector);
-        new TezoroV1_1(IERC20(address(token)), "V", "V", admin, address(0), 0, 0);
+        vm.expectRevert(TezoroV1_2.ZeroAddress.selector);
+        new TezoroV1_2(IERC20(address(token)), "V", "V", admin, address(0), 0, 0);
     }
 
     function test_constructor_reverts_feeTooHigh() public {
-        vm.expectRevert(TezoroV1_1.InvalidFee.selector);
-        new TezoroV1_1(IERC20(address(token)), "V", "V", admin, feeRecipient, 3_001, 0);
+        vm.expectRevert(TezoroV1_2.InvalidFee.selector);
+        new TezoroV1_2(IERC20(address(token)), "V", "V", admin, feeRecipient, 3_001, 0);
     }
 
     function test_constructor_reverts_bufferTooHigh() public {
-        vm.expectRevert(TezoroV1_1.InvalidBuffer.selector);
-        new TezoroV1_1(IERC20(address(token)), "V", "V", admin, feeRecipient, 0, 2_001);
+        vm.expectRevert(TezoroV1_2.InvalidBuffer.selector);
+        new TezoroV1_2(IERC20(address(token)), "V", "V", admin, feeRecipient, 0, 2_001);
     }
 
     function test_constructor_setsHwm() public view {
@@ -223,19 +223,19 @@ contract TezoroV1_1Test is Test {
 
     function test_onlyAdmin_reverts() public {
         vm.prank(nobody);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.transferAdmin(nobody);
     }
 
     function test_onlyAdminOrKeeper_reverts() public {
         vm.prank(nobody);
-        vm.expectRevert(TezoroV1_1.NotAdminOrKeeper.selector);
+        vm.expectRevert(TezoroV1_2.NotAdminOrKeeper.selector);
         vault.rebalance();
     }
 
     function test_onlyGuardianOrAdmin_reverts() public {
         vm.prank(nobody);
-        vm.expectRevert(TezoroV1_1.NotGuardianOrAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotGuardianOrAdmin.selector);
         vault.pauseStrategy(IStrategy(address(strategyA)));
     }
 
@@ -244,7 +244,7 @@ contract TezoroV1_1Test is Test {
         vault.pauseVault();
 
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.VaultIsPaused.selector);
+        vm.expectRevert(TezoroV1_2.VaultIsPaused.selector);
         vault.deposit(DEPOSIT, alice);
     }
 
@@ -260,7 +260,7 @@ contract TezoroV1_1Test is Test {
 
     function test_setIdleBuffer_reverts_tooHigh() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.InvalidBuffer.selector);
+        vm.expectRevert(TezoroV1_2.InvalidBuffer.selector);
         vault.setIdleBuffer(2_001);
     }
 
@@ -272,7 +272,7 @@ contract TezoroV1_1Test is Test {
 
     function test_setMaxDeviation_reverts_tooHigh() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.InvalidAllocation.selector);
+        vm.expectRevert(TezoroV1_2.InvalidAllocation.selector);
         vault.setMaxDeviation(10_001);
     }
 
@@ -309,7 +309,7 @@ contract TezoroV1_1Test is Test {
 
         address rm = makeAddr("rm");
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.TimelockNotFound.selector);
+        vm.expectRevert(TezoroV1_2.TimelockNotFound.selector);
         vault.setRewardsModule(rm);
     }
 
@@ -342,7 +342,7 @@ contract TezoroV1_1Test is Test {
 
     function test_addStrategy_reverts_duplicate() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyAlreadyActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyAlreadyActive.selector);
         vault.addStrategy(IStrategy(address(strategyA)));
     }
 
@@ -356,7 +356,7 @@ contract TezoroV1_1Test is Test {
 
         V1TestStrategy extra = new V1TestStrategy(address(token));
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.TooManyStrategies.selector);
+        vm.expectRevert(TezoroV1_2.TooManyStrategies.selector);
         vault.addStrategy(IStrategy(address(extra)));
     }
 
@@ -364,7 +364,7 @@ contract TezoroV1_1Test is Test {
         V1TestUSDC otherToken = new V1TestUSDC();
         V1TestStrategy mismatch = new V1TestStrategy(address(otherToken));
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyAssetMismatch.selector);
+        vm.expectRevert(TezoroV1_2.StrategyAssetMismatch.selector);
         vault.addStrategy(IStrategy(address(mismatch)));
     }
 
@@ -380,7 +380,7 @@ contract TezoroV1_1Test is Test {
 
     function test_unpauseStrategy_reverts_notActive() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyNotActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyNotActive.selector);
         vault.unpauseStrategy(IStrategy(address(0xdead)));
     }
 
@@ -392,13 +392,13 @@ contract TezoroV1_1Test is Test {
 
     function test_setMaxAllocation_reverts_notActive() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyNotActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyNotActive.selector);
         vault.setMaxAllocation(IStrategy(address(0xdead)), 5_000);
     }
 
     function test_setMaxAllocation_reverts_tooHigh() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.InvalidAllocation.selector);
+        vm.expectRevert(TezoroV1_2.InvalidAllocation.selector);
         vault.setMaxAllocation(IStrategy(address(strategyA)), 10_001);
     }
 
@@ -429,13 +429,13 @@ contract TezoroV1_1Test is Test {
 
     function test_removeStrategy_reverts_notActive() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyNotActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyNotActive.selector);
         vault.removeStrategy(IStrategy(address(0xdead)));
     }
 
     function test_pauseStrategy_reverts_notActive() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyNotActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyNotActive.selector);
         vault.pauseStrategy(IStrategy(address(0xdead)));
     }
 
@@ -462,13 +462,13 @@ contract TezoroV1_1Test is Test {
         vault.setRewardsModule(makeAddr("rm"));
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.StrategyNotActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyNotActive.selector);
         vault.sweepStrategyReward(IStrategy(address(0xdead)), address(rewardToken));
     }
 
     function test_sweepStrategyReward_reverts_noRewardsModule() public {
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotRewardsModule.selector);
+        vm.expectRevert(TezoroV1_2.NotRewardsModule.selector);
         vault.sweepStrategyReward(IStrategy(address(strategyA)), address(rewardToken));
     }
 
@@ -935,7 +935,7 @@ contract TezoroV1_1Test is Test {
         bps[0] = 5_000;
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.InvalidAllocation.selector);
+        vm.expectRevert(TezoroV1_2.InvalidAllocation.selector);
         vault.rebalance(strats, bps);
     }
 
@@ -946,7 +946,7 @@ contract TezoroV1_1Test is Test {
         bps[0] = 5_000;
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.StrategyNotActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyNotActive.selector);
         vault.rebalance(strats, bps);
     }
 
@@ -957,7 +957,7 @@ contract TezoroV1_1Test is Test {
         bps[0] = 10_001;
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.InvalidAllocation.selector);
+        vm.expectRevert(TezoroV1_2.InvalidAllocation.selector);
         vault.rebalance(strats, bps);
     }
 
@@ -971,7 +971,7 @@ contract TezoroV1_1Test is Test {
         bps[0] = 3_000;
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.AllocationExceedsCap.selector);
+        vm.expectRevert(TezoroV1_2.AllocationExceedsCap.selector);
         vault.rebalance(strats, bps);
     }
 
@@ -1108,7 +1108,7 @@ contract TezoroV1_1Test is Test {
 
     function test_cancelTimelock_reverts_notFound() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.TimelockNotFound.selector);
+        vm.expectRevert(TezoroV1_2.TimelockNotFound.selector);
         vault.cancelTimelock(keccak256("nonexistent"));
     }
 
@@ -1222,7 +1222,7 @@ contract TezoroV1_1Test is Test {
 
     function test_depositRewards_reverts_notRewardsModule() public {
         vm.prank(nobody);
-        vm.expectRevert(TezoroV1_1.NotRewardsModule.selector);
+        vm.expectRevert(TezoroV1_2.NotRewardsModule.selector);
         vault.depositRewards(1_000e6);
     }
 
@@ -1302,7 +1302,7 @@ contract TezoroV1_1Test is Test {
         vault.pauseVault();
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.VaultIsPaused.selector);
+        vm.expectRevert(TezoroV1_2.VaultIsPaused.selector);
         vault.rebalance();
     }
 
@@ -1479,7 +1479,7 @@ contract TezoroV1_1Test is Test {
         vault.pauseVault();
 
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.VaultIsPaused.selector);
+        vm.expectRevert(TezoroV1_2.VaultIsPaused.selector);
         vault.mint(1e12, alice);
     }
 
@@ -1489,7 +1489,7 @@ contract TezoroV1_1Test is Test {
 
     function test_transferAdmin_reverts_zeroAddress() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.ZeroAddress.selector);
+        vm.expectRevert(TezoroV1_2.ZeroAddress.selector);
         vault.transferAdmin(address(0));
     }
 
@@ -1515,7 +1515,7 @@ contract TezoroV1_1Test is Test {
 
     function test_acceptAdmin_reverts_notPending() public {
         vm.prank(nobody);
-        vm.expectRevert(TezoroV1_1.NotPendingAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotPendingAdmin.selector);
         vault.acceptAdmin();
     }
 
@@ -1532,7 +1532,7 @@ contract TezoroV1_1Test is Test {
 
     function test_setFeeRecipient_reverts_zero() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.ZeroAddress.selector);
+        vm.expectRevert(TezoroV1_2.ZeroAddress.selector);
         vault.setFeeRecipient(address(0));
     }
 
@@ -1560,7 +1560,7 @@ contract TezoroV1_1Test is Test {
 
     function test_setPerformanceFee_reverts_tooHigh() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.InvalidFee.selector);
+        vm.expectRevert(TezoroV1_2.InvalidFee.selector);
         vault.setPerformanceFee(3_001);
     }
 
@@ -1575,7 +1575,7 @@ contract TezoroV1_1Test is Test {
 
         // Increasing fee should require timelock
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.TimelockNotFound.selector);
+        vm.expectRevert(TezoroV1_2.TimelockNotFound.selector);
         vault.setPerformanceFee(2_000);
     }
 
@@ -1638,7 +1638,7 @@ contract TezoroV1_1Test is Test {
         vault.pauseVault();
 
         vm.prank(guardian);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.unpauseVault();
     }
 
@@ -1799,7 +1799,7 @@ contract TezoroV1_1Test is Test {
         bps[1] = 5_000; // 5000 + 5000 + 300 (idle) = 10300 > 10000
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.InvalidAllocation.selector);
+        vm.expectRevert(TezoroV1_2.InvalidAllocation.selector);
         vault.rebalance(strats, bps);
     }
 
@@ -1836,7 +1836,7 @@ contract TezoroV1_1Test is Test {
 
         // Now increasing idle buffer to 1500 => 9000 + 1500 = 10500 > BPS
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.InvalidAllocation.selector);
+        vm.expectRevert(TezoroV1_2.InvalidAllocation.selector);
         vault.setIdleBuffer(1_500);
     }
 
@@ -1855,7 +1855,7 @@ contract TezoroV1_1Test is Test {
 
         // Re-proposing same hash should revert
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.TimelockAlreadyPending.selector);
+        vm.expectRevert(TezoroV1_2.TimelockAlreadyPending.selector);
         vault.proposeTimelock(opHash);
     }
 
@@ -1921,7 +1921,7 @@ contract TezoroV1_1Test is Test {
 
         // Decreasing without proposal should revert
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.TimelockNotFound.selector);
+        vm.expectRevert(TezoroV1_2.TimelockNotFound.selector);
         vault.setTimelockDelay(1 days);
     }
 
@@ -1949,7 +1949,7 @@ contract TezoroV1_1Test is Test {
 
         // Setting to 0 is a reduction — requires timelock
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.TimelockNotFound.selector);
+        vm.expectRevert(TezoroV1_2.TimelockNotFound.selector);
         vault.setTimelockDelay(0);
     }
 
@@ -1963,7 +1963,7 @@ contract TezoroV1_1Test is Test {
 
         // Should revert without proposal
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.TimelockNotFound.selector);
+        vm.expectRevert(TezoroV1_2.TimelockNotFound.selector);
         vault.removeStrategy(IStrategy(address(strategyA)));
     }
 
@@ -2014,7 +2014,7 @@ contract TezoroV1_1Test is Test {
 
         vm.prank(admin);
         vm.expectEmit(true, false, false, true);
-        emit TezoroV1_1.StrategyRemovalFundsLost(address(strategyA), tracked);
+        emit TezoroV1_2.StrategyRemovalFundsLost(address(strategyA), tracked);
         vault.removeStrategy(IStrategy(address(strategyA)));
     }
 

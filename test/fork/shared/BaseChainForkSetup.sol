@@ -4,14 +4,14 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../../src/TezoroV1_1.sol";
-import {AaveV3Strategy} from "../../../src/strategies/AaveV3Strategy.sol";
-import {CompoundV3Strategy} from "../../../src/strategies/CompoundV3Strategy.sol";
-import {MorphoBlueMultiStrategy} from "../../../src/strategies/MorphoBlueMultiStrategy.sol";
-import {FluidStrategy} from "../../../src/strategies/FluidStrategy.sol";
+import {TezoroV1_2} from "../../../src/TezoroV1_2.sol";
+import {AaveV3StrategyV1_2} from "../../../src/strategies/AaveV3StrategyV1_2.sol";
+import {CompoundV3StrategyV1_2} from "../../../src/strategies/CompoundV3StrategyV1_2.sol";
+import {MorphoBlueMultiStrategyV1_2} from "../../../src/strategies/MorphoBlueMultiStrategyV1_2.sol";
+import {FluidStrategyV1_2} from "../../../src/strategies/FluidStrategyV1_2.sol";
 import {IMorpho, MarketParams, Id} from "../../../src/interfaces/IMorpho.sol";
 import {IStrategy} from "../../../src/interfaces/IStrategy.sol";
-import {RewardsModule} from "../../../src/RewardsModule.sol";
+import {RewardsModuleV1_2} from "../../../src/RewardsModuleV1_2.sol";
 
 /// @notice Abstract base: deploys vault + strategies, funds users.
 ///         Child test contracts inherit test modules built on top of this.
@@ -36,7 +36,7 @@ abstract contract BaseChainForkSetup is Test {
     address internal cometRewards; // address(0) = none
     address internal compRewardToken; // address(0) = none
 
-    // Swap infrastructure (for RewardsModule swap tests)
+    // Swap infrastructure (for RewardsModuleV1_2 swap tests)
     address internal uniswapRouter; // address(0) = skip swap tests
     bytes internal swapPath; // Uniswap V3 encoded path: tokenIn | fee | ... | tokenOut
     address internal uniV2Router; // Uniswap V2 / SushiSwap, address(0) = skip V2 tests
@@ -47,12 +47,12 @@ abstract contract BaseChainForkSetup is Test {
     uint256 internal userBalance; // dealt to each user (>= 3x depositAmount)
 
     // --- Deployed in setUp ---
-    TezoroV1_1 public vault;
-    AaveV3Strategy public aaveStrategy;
-    CompoundV3Strategy public compoundStrategy;
-    AaveV3Strategy public sparkStrategy;
-    MorphoBlueMultiStrategy public morphoStrategy;
-    FluidStrategy public fluidStrategy;
+    TezoroV1_2 public vault;
+    AaveV3StrategyV1_2 public aaveStrategy;
+    CompoundV3StrategyV1_2 public compoundStrategy;
+    AaveV3StrategyV1_2 public sparkStrategy;
+    MorphoBlueMultiStrategyV1_2 public morphoStrategy;
+    FluidStrategyV1_2 public fluidStrategy;
 
     address public admin = makeAddr("admin");
     address public keeper = makeAddr("keeper");
@@ -67,7 +67,7 @@ abstract contract BaseChainForkSetup is Test {
         vm.createSelectFork(forkRpc);
 
         // Deploy vault
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(token),
             string.concat("Tezoro ", tokenSymbol, "-A"),
             string.concat("t", tokenSymbol, "-A"),
@@ -82,24 +82,24 @@ abstract contract BaseChainForkSetup is Test {
             if (aaveAToken == address(0)) {
                 aaveAToken = _getAToken(aavePool, token);
             }
-            aaveStrategy = new AaveV3Strategy(token, aavePool, aaveAToken, address(vault), aaveRewardsController);
+            aaveStrategy = new AaveV3StrategyV1_2(token, aavePool, aaveAToken, address(vault), aaveRewardsController);
         }
 
         if (compoundComet != address(0)) {
-            compoundStrategy = new CompoundV3Strategy(token, compoundComet, address(vault), cometRewards, compRewardToken);
+            compoundStrategy = new CompoundV3StrategyV1_2(token, compoundComet, address(vault), cometRewards, compRewardToken);
         }
 
         if (sparkPool != address(0)) {
             address spToken = _getAToken(sparkPool, token);
-            sparkStrategy = new AaveV3Strategy(token, sparkPool, spToken, address(vault), sparkRewardsController);
+            sparkStrategy = new AaveV3StrategyV1_2(token, sparkPool, spToken, address(vault), sparkRewardsController);
         }
 
         if (morpho != address(0)) {
-            morphoStrategy = new MorphoBlueMultiStrategy(token, morpho, address(vault), admin, "Morpho Multi", 64, new MarketParams[](0));
+            morphoStrategy = new MorphoBlueMultiStrategyV1_2(token, morpho, address(vault), admin, "Morpho Multi", 64, new MarketParams[](0));
         }
 
         if (fluidFToken != address(0)) {
-            fluidStrategy = new FluidStrategy(token, fluidFToken, address(vault));
+            fluidStrategy = new FluidStrategyV1_2(token, fluidFToken, address(vault));
         }
 
         // Add available strategies with equal allocation

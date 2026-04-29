@@ -5,10 +5,10 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
-import {RewardsModule} from "../../src/RewardsModule.sol";
+import {RewardsModuleV1_2} from "../../src/RewardsModuleV1_2.sol";
 
 // Ethereum mainnet
 address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
@@ -38,10 +38,10 @@ interface ISwapRouter {
     function exactInput(ExactInputParams calldata params) external payable returns (uint256 amountOut);
 }
 
-/// @notice Full integration: TezoroV1_1 vault + two strategies (MetaMorpho + YO).
+/// @notice Full integration: TezoroV1_2 vault + two strategies (MetaMorpho + YO).
 ///
 ///         Known limitation: YO vault charges ~0.001% exit fee on redeem.
-///         TezoroV1_1._withdraw() has zero dust tolerance, so full withdrawals
+///         TezoroV1_2._withdraw() has zero dust tolerance, so full withdrawals
 ///         where ALL funds must come through YO will revert with WithdrawalFailed().
 ///         This is fine in production: vault always has idle buffer + multiple
 ///         strategies, and the keeper caps YO allocation at 25-30%.
@@ -49,9 +49,9 @@ interface ISwapRouter {
 contract YoIntegrationTest is Test {
     using SafeERC20 for IERC20;
 
-    TezoroV1_1 vault;
-    ERC4626MultiStrategy morphoStrategy;
-    ERC4626MultiStrategy yoStrategy;
+    TezoroV1_2 vault;
+    ERC4626MultiStrategyV1_2 morphoStrategy;
+    ERC4626MultiStrategyV1_2 yoStrategy;
 
     address admin = makeAddr("admin");
     address keeper = makeAddr("keeper");
@@ -65,7 +65,7 @@ contract YoIntegrationTest is Test {
     function setUp() public {
         vm.createSelectFork("ethereum");
 
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(USDC),
             "Tezoro USDC-A",
             "tUSDC-A",
@@ -75,11 +75,11 @@ contract YoIntegrationTest is Test {
             300    // 3% idle buffer
         );
 
-        morphoStrategy = new ERC4626MultiStrategy(
+        morphoStrategy = new ERC4626MultiStrategyV1_2(
             USDC, address(vault), admin, "MetaMorpho USDC", 64, new address[](0)
         );
 
-        yoStrategy = new ERC4626MultiStrategy(
+        yoStrategy = new ERC4626MultiStrategyV1_2(
             USDC, address(vault), admin, "YO USD", 8, new address[](0)
         );
 
@@ -283,9 +283,9 @@ contract YoIntegrationTest is Test {
 
     // ====== Merkl Reward Pipeline ======
 
-    /// @notice Test sweepReward: simulate Merkl-claimed tokens on YO strategy, sweep to RewardsModule
+    /// @notice Test sweepReward: simulate Merkl-claimed tokens on YO strategy, sweep to RewardsModuleV1_2
     function test_merklReward_sweepFromStrategy() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         vault.setRewardsModule(address(rm));
@@ -308,7 +308,7 @@ contract YoIntegrationTest is Test {
 
         assertEq(IERC20(MORPHO_TOKEN).balanceOf(address(yoStrategy)), rewardAmount);
 
-        // Vault sweeps reward tokens from strategy to RewardsModule
+        // Vault sweeps reward tokens from strategy to RewardsModuleV1_2
         vm.prank(keeper);
         vault.sweepStrategyReward(IStrategy(address(yoStrategy)), MORPHO_TOKEN);
 
@@ -318,7 +318,7 @@ contract YoIntegrationTest is Test {
 
     /// @notice Full Merkl reward pipeline: claim simulation -> sweep -> swap -> compound into vault
     function test_merklReward_fullPipeline() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         vault.setRewardsModule(address(rm));
@@ -343,7 +343,7 @@ contract YoIntegrationTest is Test {
         uint256 rewardAmount = 500e18;
         deal(MORPHO_TOKEN, address(yoStrategy), rewardAmount);
 
-        // 3. Sweep reward from strategy to RewardsModule
+        // 3. Sweep reward from strategy to RewardsModuleV1_2
         vm.prank(keeper);
         vault.sweepStrategyReward(IStrategy(address(yoStrategy)), MORPHO_TOKEN);
 
@@ -382,7 +382,7 @@ contract YoIntegrationTest is Test {
 
     /// @notice Test executeClaim whitelist: Merkl distributor selector can be whitelisted
     function test_merklReward_claimWhitelist() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         // Merkl claim selector: claim(address[],address[],uint256[],bytes32[][])
         bytes4 merklClaimSelector = bytes4(keccak256("claim(address[],address[],uint256[],bytes32[][])"));
@@ -416,13 +416,13 @@ contract YoIntegrationTest is Test {
 
         // Should pass whitelist check but fail at Merkl level (invalid proof)
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.ClaimFailed.selector);
+        vm.expectRevert(RewardsModuleV1_2.ClaimFailed.selector);
         rm.executeClaim(MERKL_DISTRIBUTOR, claimData);
     }
 
     /// @notice Verify harvest() returns 0 for YO strategy (no inline claim mechanism)
     function test_yoStrategy_harvestReturnsZero() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         vault.setRewardsModule(address(rm));

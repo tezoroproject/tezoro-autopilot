@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
 
 // Ethereum mainnet
 address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
@@ -27,12 +27,12 @@ interface IEulerEarnFactoryLike {
     function isVault(address target) external view returns (bool);
 }
 
-/// @notice Fork test for live Euler Earn vaults through ERC4626MultiStrategy on Ethereum mainnet.
+/// @notice Fork test for live Euler Earn vaults through ERC4626MultiStrategyV1_2 on Ethereum mainnet.
 ///         This validates compatibility with Euler Earn proper, not raw EVK credit vaults.
 contract EulerEarnERC4626MultiStrategyForkTest is Test {
     using SafeERC20 for IERC20;
 
-    ERC4626MultiStrategy strategy;
+    ERC4626MultiStrategyV1_2 strategy;
     IEulerEarnFactoryLike factory = IEulerEarnFactoryLike(EULER_EARN_FACTORY);
 
     address vaultAddr = makeAddr("vault");
@@ -98,7 +98,7 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
         uint256 tested;
 
         for (uint256 i = 0; i < vaults.length; i++) {
-            ERC4626MultiStrategy localStrategy =
+            ERC4626MultiStrategyV1_2 localStrategy =
                 _deployStrategy(string.concat("Euler Earn Isolated ", vm.toString(i)), new address[](0));
 
             vm.prank(adminAddr);
@@ -238,7 +238,7 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
         _depositIntoStrategy(allocationAmount);
 
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotKeeper.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotKeeper.selector);
         strategy.allocate(vault_, allocationAmount);
     }
 
@@ -248,7 +248,7 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
         _depositIntoStrategy(allocationAmount - 1);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.InsufficientIdle.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.InsufficientIdle.selector);
         strategy.allocate(vault_, allocationAmount);
     }
 
@@ -261,7 +261,7 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
         strategy.freezeSubVaultDeposits(vault_);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.DepositsFrozen.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.DepositsFrozen.selector);
         strategy.allocate(vault_, allocationAmount);
 
         vm.prank(adminAddr);
@@ -282,7 +282,7 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
         strategy.allocate(vault_, allocationAmount);
 
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultHasActivePosition.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultHasActivePosition.selector);
         strategy.removeSubVault(vault_);
     }
 
@@ -317,13 +317,13 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
         assertEq(strategy.pendingAdmin(), address(0));
 
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.NotAdmin.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotAdmin.selector);
         strategy.setKeeper(randomUser);
     }
 
     function test_constructor_acceptsLiveInitialEulerEarnSubVaults() public {
         address[] memory initialSubVaults = _configuredVaults();
-        ERC4626MultiStrategy seededStrategy = _deployStrategy("Euler Earn Seeded", initialSubVaults);
+        ERC4626MultiStrategyV1_2 seededStrategy = _deployStrategy("Euler Earn Seeded", initialSubVaults);
 
         for (uint256 i = 0; i < initialSubVaults.length; i++) {
             assertTrue(seededStrategy.isApproved(initialSubVaults[i]));
@@ -333,19 +333,19 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
 
     function test_sweepReward_revertsIfNotVault() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotVault.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotVault.selector);
         strategy.sweepReward(address(0x1), vaultAddr);
     }
 
     function test_sweepReward_revertsOnAsset() public {
         vm.prank(vaultAddr);
-        vm.expectRevert(ERC4626MultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(USDC, vaultAddr);
     }
 
     function test_sweepReward_revertsOnApprovedSubVaultShare() public {
         vm.prank(vaultAddr);
-        vm.expectRevert(ERC4626MultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(EE_USDC, vaultAddr);
     }
 
@@ -358,9 +358,9 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
         address[] memory initialSubVaults
     )
         internal
-        returns (ERC4626MultiStrategy targetStrategy)
+        returns (ERC4626MultiStrategyV1_2 targetStrategy)
     {
-        targetStrategy = new ERC4626MultiStrategy(USDC, vaultAddr, adminAddr, strategyName, 64, initialSubVaults);
+        targetStrategy = new ERC4626MultiStrategyV1_2(USDC, vaultAddr, adminAddr, strategyName, 64, initialSubVaults);
 
         vm.prank(adminAddr);
         targetStrategy.setKeeper(keeperAddr);
@@ -373,14 +373,14 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
         _depositIntoStrategy(strategy, amount);
     }
 
-    function _depositIntoStrategy(ERC4626MultiStrategy targetStrategy, uint256 amount) internal {
+    function _depositIntoStrategy(ERC4626MultiStrategyV1_2 targetStrategy, uint256 amount) internal {
         deal(USDC, vaultAddr, amount);
         vm.prank(vaultAddr);
         targetStrategy.deposit(amount);
     }
 
     function _plannedAllocations(
-        ERC4626MultiStrategy targetStrategy,
+        ERC4626MultiStrategyV1_2 targetStrategy,
         uint256 preferredPerVault
     )
         internal
@@ -404,7 +404,7 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
     }
 
     function _firstAllocatableVault(
-        ERC4626MultiStrategy targetStrategy,
+        ERC4626MultiStrategyV1_2 targetStrategy,
         uint256 preferredAmount
     )
         internal
@@ -427,7 +427,7 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
     }
 
     function _allocatePlan(
-        ERC4626MultiStrategy targetStrategy,
+        ERC4626MultiStrategyV1_2 targetStrategy,
         address[] memory vaults,
         uint256[] memory amounts
     )
@@ -442,7 +442,7 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
     }
 
     function _sumDirectVaultAssets(
-        ERC4626MultiStrategy targetStrategy,
+        ERC4626MultiStrategyV1_2 targetStrategy,
         address[] memory vaults
     )
         internal
@@ -455,7 +455,7 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
     }
 
     function _directVaultAssets(
-        ERC4626MultiStrategy targetStrategy,
+        ERC4626MultiStrategyV1_2 targetStrategy,
         address subVault
     )
         internal
@@ -476,7 +476,7 @@ contract EulerEarnERC4626MultiStrategyForkTest is Test {
         vaults[4] = KPK_RWA_EULER_USDC;
     }
 
-    function _addSubVaults(ERC4626MultiStrategy targetStrategy, address[] memory vaults) internal {
+    function _addSubVaults(ERC4626MultiStrategyV1_2 targetStrategy, address[] memory vaults) internal {
         for (uint256 i = 0; i < vaults.length; i++) {
             targetStrategy.addSubVault(vaults[i]);
         }

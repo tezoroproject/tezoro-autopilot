@@ -7,7 +7,7 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {IStrategy} from "../../../src/interfaces/IStrategy.sol";
 
 // ========================================================================
-// Shared mock contracts for RewardsModule test suites.
+// Shared mock contracts for RewardsModuleV1_2 test suites.
 // Single source of truth — no duplicate mocks across test files.
 // ========================================================================
 

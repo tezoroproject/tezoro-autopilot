@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
 
 address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 
@@ -13,12 +13,12 @@ address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 address constant STEAKHOUSE_USDC = 0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB;
 address constant GAUNTLET_USDC_CORE = 0x8eB67A509616cd6A7c1B3c8C21D48FF57df3d458;
 
-/// @notice Fuzz tests for ERC4626MultiStrategy on Ethereum mainnet fork.
+/// @notice Fuzz tests for ERC4626MultiStrategyV1_2 on Ethereum mainnet fork.
 ///         Tests properties that must hold for ANY valid input amount.
 contract ERC4626StrategyFuzz is Test {
     using SafeERC20 for IERC20;
 
-    ERC4626MultiStrategy strategy;
+    ERC4626MultiStrategyV1_2 strategy;
 
     address vaultAddr = makeAddr("vault");
     address adminAddr = makeAddr("admin");
@@ -29,7 +29,7 @@ contract ERC4626StrategyFuzz is Test {
     function setUp() public {
         vm.createSelectFork("ethereum");
 
-        strategy = new ERC4626MultiStrategy(USDC, vaultAddr, adminAddr, "ERC4626 Fuzz", 64, new address[](0));
+        strategy = new ERC4626MultiStrategyV1_2(USDC, vaultAddr, adminAddr, "ERC4626 Fuzz", 64, new address[](0));
 
         vm.startPrank(adminAddr);
         strategy.setKeeper(keeperAddr);
@@ -246,7 +246,7 @@ contract ERC4626StrategyFuzz is Test {
         strategy.deposit(deposit);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.InsufficientIdle.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.InsufficientIdle.selector);
         strategy.allocate(STEAKHOUSE_USDC, deposit + extra);
     }
 
@@ -302,7 +302,7 @@ contract ERC4626StrategyFuzz is Test {
 
         // Allocate should be blocked
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.DepositsFrozen.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.DepositsFrozen.selector);
         strategy.allocate(STEAKHOUSE_USDC, 1e6);
     }
 

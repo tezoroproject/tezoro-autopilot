@@ -3,17 +3,17 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
-import {RewardsModule} from "../../src/RewardsModule.sol";
+import {RewardsModuleV1_2} from "../../src/RewardsModuleV1_2.sol";
 
 /// @title VaultALive — fork tests against the deployed Vault A on Ethereum mainnet
 /// @notice Tests the live vault at 0x6992B35d23A0B7732a6b0d6e6Fc10A76c08B3d16
 ///         Verifies: user flows, vault state, keeper operations, admin operations
 contract VaultALive is Test {
     // -- Deployed addresses --
-    TezoroV1_1 constant VAULT = TezoroV1_1(0x6992B35d23A0B7732a6b0d6e6Fc10A76c08B3d16);
-    RewardsModule constant REWARDS = RewardsModule(0x29054FC109E4746047ddc6124e6Db0ceAE24ab50);
+    TezoroV1_2 constant VAULT = TezoroV1_2(0x6992B35d23A0B7732a6b0d6e6Fc10A76c08B3d16);
+    RewardsModuleV1_2 constant REWARDS = RewardsModuleV1_2(0x29054FC109E4746047ddc6124e6Db0ceAE24ab50);
     IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
 
     // Strategy addresses

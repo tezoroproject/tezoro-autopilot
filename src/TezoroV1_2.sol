@@ -9,13 +9,13 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IStrategy} from "./interfaces/IStrategy.sol";
 
-/// @title TezoroV1
+/// @title TezoroV1_2
 /// @notice ERC-4626 vault that deploys assets across multiple lending strategies.
 ///         Supports idle buffer, withdrawal waterfall, HWM-based performance fee,
 ///         keeper role, rewards auto-compounding, and admin-managed strategy allocation.
 /// @dev Internal accounting prevents donation attacks. Virtual shares offset (via _decimalsOffset)
 ///      prevents first-depositor inflation attack.
-contract TezoroV1_1 is ERC4626, ReentrancyGuard {
+contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using Math for uint256;
 
@@ -676,7 +676,7 @@ contract TezoroV1_1 is ERC4626, ReentrancyGuard {
     }
 
     /// @notice Sweep non-asset reward tokens from a strategy to the rewards module.
-    ///         Used after RewardsModule.executeClaim() sends merkle-claimed rewards to a strategy.
+    ///         Used after RewardsModuleV1_2.executeClaim() sends merkle-claimed rewards to a strategy.
     /// @param strategy The strategy holding the reward tokens
     /// @param rewardToken The reward token to sweep
     function sweepStrategyReward(

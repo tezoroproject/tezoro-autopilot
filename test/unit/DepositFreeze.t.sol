@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
 
 // ---- Mock ERC-20 ----
@@ -98,7 +98,7 @@ contract MockStrategy is IStrategy {
 
 contract DepositFreezeTest is Test {
     MockUSDC token;
-    TezoroV1_1 vault;
+    TezoroV1_2 vault;
     MockStrategy strategyA;
     MockStrategy strategyB;
 
@@ -111,7 +111,7 @@ contract DepositFreezeTest is Test {
 
     function setUp() public {
         token = new MockUSDC();
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(address(token)),
             "Tezoro USDC-A",
             "tUSDC-A",
@@ -160,7 +160,7 @@ contract DepositFreezeTest is Test {
 
     function test_freezeStrategyDeposits_emitsEvent() public {
         vm.expectEmit(true, false, false, false);
-        emit TezoroV1_1.StrategyDepositFrozen(address(strategyA));
+        emit TezoroV1_2.StrategyDepositFrozen(address(strategyA));
 
         vm.prank(admin);
         vault.freezeStrategyDeposits(IStrategy(address(strategyA)));
@@ -168,13 +168,13 @@ contract DepositFreezeTest is Test {
 
     function test_freezeStrategyDeposits_revertsIfNotGuardianOrAdmin() public {
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotGuardianOrAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotGuardianOrAdmin.selector);
         vault.freezeStrategyDeposits(IStrategy(address(strategyA)));
     }
 
     function test_freezeStrategyDeposits_revertsIfNotActive() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyNotActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyNotActive.selector);
         vault.freezeStrategyDeposits(IStrategy(makeAddr("unknown")));
     }
 
@@ -182,7 +182,7 @@ contract DepositFreezeTest is Test {
         vm.startPrank(admin);
         vault.freezeStrategyDeposits(IStrategy(address(strategyA)));
 
-        vm.expectRevert(TezoroV1_1.StrategyAlreadyDepositFrozen.selector);
+        vm.expectRevert(TezoroV1_2.StrategyAlreadyDepositFrozen.selector);
         vault.freezeStrategyDeposits(IStrategy(address(strategyA)));
         vm.stopPrank();
     }
@@ -203,7 +203,7 @@ contract DepositFreezeTest is Test {
         vault.freezeStrategyDeposits(IStrategy(address(strategyA)));
 
         vm.expectEmit(true, false, false, false);
-        emit TezoroV1_1.StrategyDepositUnfrozen(address(strategyA));
+        emit TezoroV1_2.StrategyDepositUnfrozen(address(strategyA));
 
         vm.prank(admin);
         vault.unfreezeStrategyDeposits(IStrategy(address(strategyA)));
@@ -214,13 +214,13 @@ contract DepositFreezeTest is Test {
         vault.freezeStrategyDeposits(IStrategy(address(strategyA)));
 
         vm.prank(guardian);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.unfreezeStrategyDeposits(IStrategy(address(strategyA)));
     }
 
     function test_unfreezeStrategyDeposits_revertsIfNotFrozen() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyNotDepositFrozen.selector);
+        vm.expectRevert(TezoroV1_2.StrategyNotDepositFrozen.selector);
         vault.unfreezeStrategyDeposits(IStrategy(address(strategyA)));
     }
 
@@ -412,7 +412,7 @@ contract DepositFreezeTest is Test {
         vault.rebalance(strats, bps);
 
         vm.expectEmit(true, false, false, false);
-        emit TezoroV1_1.RecalledToIdle(address(strategyA), 0); // amount checked loosely
+        emit TezoroV1_2.RecalledToIdle(address(strategyA), 0); // amount checked loosely
 
         vm.prank(admin);
         vault.recallToIdle(IStrategy(address(strategyA)));
@@ -420,13 +420,13 @@ contract DepositFreezeTest is Test {
 
     function test_recallToIdle_revertsIfNotAdmin() public {
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.recallToIdle(IStrategy(address(strategyA)));
     }
 
     function test_recallToIdle_revertsIfNotActive() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyNotActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyNotActive.selector);
         vault.recallToIdle(IStrategy(makeAddr("unknown")));
     }
 
@@ -510,7 +510,7 @@ contract DepositFreezeTest is Test {
         vault.deposit(10_000e6, alice);
 
         vm.expectEmit(true, false, false, false);
-        emit TezoroV1_1.ForceRedeemed(alice, 0, 0); // loose match
+        emit TezoroV1_2.ForceRedeemed(alice, 0, 0); // loose match
 
         vm.prank(admin);
         vault.forceRedeem(alice);
@@ -540,7 +540,7 @@ contract DepositFreezeTest is Test {
 
     function test_forceRedeem_revertsIfNoShares() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.NoSharesToRedeem.selector);
+        vm.expectRevert(TezoroV1_2.NoSharesToRedeem.selector);
         vault.forceRedeem(alice);
     }
 
@@ -549,7 +549,7 @@ contract DepositFreezeTest is Test {
         vault.deposit(1_000e6, alice);
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.forceRedeem(alice);
     }
 
@@ -614,7 +614,7 @@ contract DepositFreezeTest is Test {
         users[1] = bob;
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.NoSharesToRedeem.selector);
+        vm.expectRevert(TezoroV1_2.NoSharesToRedeem.selector);
         vault.batchForceRedeem(users);
     }
 
@@ -622,7 +622,7 @@ contract DepositFreezeTest is Test {
         address[] memory users = new address[](0);
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.EmptyUserList.selector);
+        vm.expectRevert(TezoroV1_2.EmptyUserList.selector);
         vault.batchForceRedeem(users);
     }
 
@@ -633,7 +633,7 @@ contract DepositFreezeTest is Test {
         }
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.BatchTooLarge.selector);
+        vm.expectRevert(TezoroV1_2.BatchTooLarge.selector);
         vault.batchForceRedeem(users);
     }
 
@@ -642,7 +642,7 @@ contract DepositFreezeTest is Test {
         users[0] = alice;
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.batchForceRedeem(users);
     }
 
@@ -667,7 +667,7 @@ contract DepositFreezeTest is Test {
         strategyA.setFullyBroken(true);
 
         vm.expectEmit(true, false, false, true);
-        emit TezoroV1_1.RecallFailed(address(strategyA), tracked);
+        emit TezoroV1_2.RecallFailed(address(strategyA), tracked);
 
         vm.prank(admin);
         vault.recallToIdle(IStrategy(address(strategyA)));
@@ -701,7 +701,7 @@ contract DepositFreezeTest is Test {
         vault.setTimelockDelay(1 days);
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.TimelockNotFound.selector);
+        vm.expectRevert(TezoroV1_2.TimelockNotFound.selector);
         vault.forceRedeem(alice);
     }
 
@@ -716,7 +716,7 @@ contract DepositFreezeTest is Test {
         vault.proposeTimelock(opHash);
 
         // Try immediately — not ready yet
-        vm.expectRevert(TezoroV1_1.TimelockNotReady.selector);
+        vm.expectRevert(TezoroV1_2.TimelockNotReady.selector);
         vault.forceRedeem(alice);
         vm.stopPrank();
     }
@@ -763,7 +763,7 @@ contract DepositFreezeTest is Test {
 
         // Try to replay the same proposal
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.TimelockAlreadyExecuted.selector);
+        vm.expectRevert(TezoroV1_2.TimelockAlreadyExecuted.selector);
         vault.forceRedeem(alice);
     }
 
@@ -780,7 +780,7 @@ contract DepositFreezeTest is Test {
         users[0] = alice;
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.TimelockNotFound.selector);
+        vm.expectRevert(TezoroV1_2.TimelockNotFound.selector);
         vault.batchForceRedeem(users);
     }
 

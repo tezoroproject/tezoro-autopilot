@@ -7,11 +7,11 @@ import {IStrategy} from "../interfaces/IStrategy.sol";
 import {ICompoundV3Comet} from "../interfaces/ICompoundV3Comet.sol";
 import {ICometRewards} from "../interfaces/ICometRewards.sol";
 
-/// @title CompoundV3Strategy
+/// @title CompoundV3StrategyV1_2
 /// @notice Strategy adapter for Compound V3 (Comet).
 ///         Supplies and withdraws a single base asset.
 ///         Harvests COMP rewards via CometRewards contract.
-contract CompoundV3Strategy is IStrategy {
+contract CompoundV3StrategyV1_2 is IStrategy {
     using SafeERC20 for IERC20;
 
     address public immutable override asset;
@@ -114,7 +114,7 @@ contract CompoundV3Strategy is IStrategy {
         return claimed;
     }
 
-    /// @notice Sweep non-asset reward tokens to a recipient (e.g. RewardsModule).
+    /// @notice Sweep non-asset reward tokens to a recipient (e.g. RewardsModuleV1_2).
     function sweepReward(address rewardToken_, address to) external override onlyVault returns (uint256 amount) {
         if (rewardToken_ == asset || rewardToken_ == address(comet)) revert CannotSweepAsset();
         amount = IERC20(rewardToken_).balanceOf(address(this));

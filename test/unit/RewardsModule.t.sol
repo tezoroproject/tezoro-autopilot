@@ -5,8 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
-import {RewardsModule} from "../../src/RewardsModule.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
+import {RewardsModuleV1_2} from "../../src/RewardsModuleV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
 
 // ---- Mock tokens ----
@@ -124,8 +124,8 @@ contract MockRouter {
         usdcOut = amount;
     }
 
-    /// @dev Called by RewardsModule.swap() via low-level call.
-    ///      Pulls tokenIn from caller (RewardsModule), sends usdcOut USDC back.
+    /// @dev Called by RewardsModuleV1_2.swap() via low-level call.
+    ///      Pulls tokenIn from caller (RewardsModuleV1_2), sends usdcOut USDC back.
     function doSwap(address tokenIn, uint256 amountIn) external {
         IERC20(tokenIn).safeTransferFrom(msg.sender, address(this), amountIn);
         IERC20(usdc).safeTransfer(msg.sender, usdcOut);
@@ -137,8 +137,8 @@ contract MockRouter {
 contract RewardsModuleTest is Test {
     MockUSDC usdc;
     MockRewardToken rwd;
-    TezoroV1_1 vault;
-    RewardsModule module;
+    TezoroV1_2 vault;
+    RewardsModuleV1_2 module;
     RewardsStrategy strategy;
     MockRouter router;
 
@@ -153,7 +153,7 @@ contract RewardsModuleTest is Test {
         rwd = new MockRewardToken();
         router = new MockRouter(address(usdc));
 
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(address(usdc)),
             "Tezoro USDC-A",
             "tUSDC-A",
@@ -163,7 +163,7 @@ contract RewardsModuleTest is Test {
             300 // 3% idle buffer
         );
 
-        module = new RewardsModule(address(vault), admin);
+        module = new RewardsModuleV1_2(address(vault), admin);
         strategy = new RewardsStrategy(address(usdc), address(rwd));
 
         vm.startPrank(admin);
@@ -206,7 +206,7 @@ contract RewardsModuleTest is Test {
     }
 
     // =========================================================================
-    // harvestAll → reward tokens swept to RewardsModule
+    // harvestAll → reward tokens swept to RewardsModuleV1_2
     // =========================================================================
 
     function test_harvestAll_sweepsRewardTokensToModule() public {
@@ -230,13 +230,13 @@ contract RewardsModuleTest is Test {
 
         vm.prank(keeper);
         vm.expectEmit(true, true, true, false);
-        emit TezoroV1_1.HarvestCompleted(0); // value doesn't matter, just check event
+        emit TezoroV1_2.HarvestCompleted(0); // value doesn't matter, just check event
         vault.harvestAll();
     }
 
     function test_harvestAll_noopWhenNoRewardsModule() public {
         // Deploy a vault without a rewards module
-        TezoroV1_1 bareVault = new TezoroV1_1(
+        TezoroV1_2 bareVault = new TezoroV1_2(
             IERC20(address(usdc)), "T", "t", admin, makeAddr("fee"), 1_500, 300
         );
         vm.prank(admin);
@@ -257,7 +257,7 @@ contract RewardsModuleTest is Test {
 
         // EOA target hits code-size check first
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.TargetHasNoCode.selector);
+        vm.expectRevert(RewardsModuleV1_2.TargetHasNoCode.selector);
         module.executeClaim(fakeTarget, data);
     }
 
@@ -284,7 +284,7 @@ contract RewardsModuleTest is Test {
 
     function test_swap_revertsIfRouterNotWhitelisted() public {
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.RouterNotWhitelisted.selector);
+        vm.expectRevert(RewardsModuleV1_2.RouterNotWhitelisted.selector);
         module.swap(
             address(router), address(rwd), address(usdc), 1e18, 1e6,
             abi.encodeCall(MockRouter.doSwap, (address(rwd), 1e18))
@@ -297,7 +297,7 @@ contract RewardsModuleTest is Test {
 
         address notUsdc = makeAddr("notUsdc");
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.InvalidTokenOut.selector);
+        vm.expectRevert(RewardsModuleV1_2.InvalidTokenOut.selector);
         module.swap(
             address(router), address(rwd), notUsdc, 1e18, 0,
             abi.encodeCall(MockRouter.doSwap, (address(rwd), 1e18))
@@ -309,7 +309,7 @@ contract RewardsModuleTest is Test {
         module.setRouterWhitelist(address(router), true);
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.CannotSwapBaseAsset.selector);
+        vm.expectRevert(RewardsModuleV1_2.CannotSwapBaseAsset.selector);
         module.swap(
             address(router), address(usdc), address(usdc), 1e6, 0,
             abi.encodeCall(MockRouter.doSwap, (address(usdc), 1e6))
@@ -326,7 +326,7 @@ contract RewardsModuleTest is Test {
         router.setUsdcOut(100e6); // router will output 100 USDC
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.SlippageExceeded.selector);
+        vm.expectRevert(RewardsModuleV1_2.SlippageExceeded.selector);
         module.swap(
             address(router), address(rwd), address(usdc), 100e18, 200e6, // require 200 USDC out
             abi.encodeCall(MockRouter.doSwap, (address(rwd), 100e18))
@@ -360,7 +360,7 @@ contract RewardsModuleTest is Test {
 
     function test_sweepToVault_revertsWhenEmpty() public {
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.NothingToSweep.selector);
+        vm.expectRevert(RewardsModuleV1_2.NothingToSweep.selector);
         module.sweepToVault();
     }
 
@@ -401,7 +401,7 @@ contract RewardsModuleTest is Test {
 
         vm.prank(keeper);
         vm.expectEmit(true, true, true, true);
-        emit RewardsModule.SweptToVault(rewardUsdc);
+        emit RewardsModuleV1_2.SweptToVault(rewardUsdc);
         module.sweepToVault();
     }
 
@@ -422,7 +422,7 @@ contract RewardsModuleTest is Test {
         uint256 rewardTokens = 1_000e18;
         strategy.simulateRewardAccrual(rewardTokens);
 
-        // --- Step 2: Keeper harvests — RWD lands in RewardsModule ---
+        // --- Step 2: Keeper harvests — RWD lands in RewardsModuleV1_2 ---
         vm.prank(keeper);
         vault.harvestAll();
         assertEq(rwd.balanceOf(address(module)), rewardTokens, "Step 2: RWD in module");
@@ -470,7 +470,7 @@ contract RewardsModuleTest is Test {
     function test_rescueToken_cannotRescueBaseAsset() public {
         usdc.mint(address(module), 1_000e6);
         vm.prank(admin);
-        vm.expectRevert(RewardsModule.CannotRescueBaseAsset.selector);
+        vm.expectRevert(RewardsModuleV1_2.CannotRescueBaseAsset.selector);
         module.rescueToken(address(usdc), admin, 1_000e6);
     }
 
@@ -491,12 +491,12 @@ contract RewardsModuleTest is Test {
         vm.prank(alice);
         usdc.approve(address(vault), 1_000e6);
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotRewardsModule.selector);
+        vm.expectRevert(TezoroV1_2.NotRewardsModule.selector);
         vault.depositRewards(1_000e6);
     }
 
     // =========================================================================
-    // Two-step admin transfer (RewardsModule)
+    // Two-step admin transfer (RewardsModuleV1_2)
     // =========================================================================
 
     function test_transferAdmin_setsPending() public {
@@ -520,7 +520,7 @@ contract RewardsModuleTest is Test {
 
     function test_acceptAdmin_reverts_notPending() public {
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotPendingAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotPendingAdmin.selector);
         module.acceptAdmin();
     }
 
@@ -530,32 +530,32 @@ contract RewardsModuleTest is Test {
 
     function test_setClaimWhitelist_reverts_notAdmin() public {
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         module.setClaimWhitelist(makeAddr("target"), bytes4(0xdeadbeef), true);
     }
 
     function test_setRouterWhitelist_reverts_notAdmin() public {
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdmin.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdmin.selector);
         module.setRouterWhitelist(makeAddr("router"), true);
     }
 
     function test_executeClaim_reverts_notAdminOrKeeper() public {
         bytes memory data = abi.encodeWithSignature("claim()");
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdminOrKeeper.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdminOrKeeper.selector);
         module.executeClaim(makeAddr("target"), data);
     }
 
     function test_swap_reverts_notAdminOrKeeper() public {
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdminOrKeeper.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdminOrKeeper.selector);
         module.swap(address(router), address(rwd), address(usdc), 1e18, 1e6, hex"");
     }
 
     function test_sweepToVault_reverts_notAdminOrKeeper() public {
         vm.prank(alice);
-        vm.expectRevert(RewardsModule.NotAdminOrKeeper.selector);
+        vm.expectRevert(RewardsModuleV1_2.NotAdminOrKeeper.selector);
         module.sweepToVault();
     }
 
@@ -564,25 +564,25 @@ contract RewardsModuleTest is Test {
         MockClaimable target = new MockClaimable(address(rwd));
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.TargetNotWhitelisted.selector);
+        vm.expectRevert(RewardsModuleV1_2.TargetNotWhitelisted.selector);
         module.executeClaim(address(target), hex"aabbcc");
     }
 
     function test_rescueToken_reverts_zeroAddress() public {
         rwd.mint(address(module), 100e18);
         vm.prank(admin);
-        vm.expectRevert(RewardsModule.ZeroAddress.selector);
+        vm.expectRevert(RewardsModuleV1_2.ZeroAddress.selector);
         module.rescueToken(address(rwd), address(0), 100e18);
     }
 
     function test_constructor_reverts_zeroVault() public {
-        vm.expectRevert(RewardsModule.ZeroAddress.selector);
-        new RewardsModule(address(0), admin);
+        vm.expectRevert(RewardsModuleV1_2.ZeroAddress.selector);
+        new RewardsModuleV1_2(address(0), admin);
     }
 
     function test_constructor_reverts_zeroAdmin() public {
-        vm.expectRevert(RewardsModule.ZeroAddress.selector);
-        new RewardsModule(address(vault), address(0));
+        vm.expectRevert(RewardsModuleV1_2.ZeroAddress.selector);
+        new RewardsModuleV1_2(address(vault), address(0));
     }
 }
 

@@ -6,10 +6,10 @@ import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IStrategy} from "../interfaces/IStrategy.sol";
 
-/// @title FluidStrategy
+/// @title FluidStrategyV1_2
 /// @notice Strategy adapter for Fluid lending (fTokens).
 ///         fTokens are ERC-4626 vaults -- deposit/withdraw via standard interface.
-contract FluidStrategy is IStrategy {
+contract FluidStrategyV1_2 is IStrategy {
     using SafeERC20 for IERC20;
 
     address public immutable override asset;
@@ -82,12 +82,12 @@ contract FluidStrategy is IStrategy {
 
     function harvest(address) external pure override returns (uint256) {
         // Fluid rewards handled externally (Merkl, etc.).
-        // Claims are done via RewardsModule.executeClaim(), tokens land here,
+        // Claims are done via RewardsModuleV1_2.executeClaim(), tokens land here,
         // then swept via sweepReward().
         return 0;
     }
 
-    /// @notice Sweep non-asset reward tokens to a recipient (e.g. RewardsModule).
+    /// @notice Sweep non-asset reward tokens to a recipient (e.g. RewardsModuleV1_2).
     function sweepReward(address rewardToken, address to) external override onlyVault returns (uint256 amount) {
         if (rewardToken == asset || rewardToken == address(fToken)) revert CannotSweepAsset();
         amount = IERC20(rewardToken).balanceOf(address(this));

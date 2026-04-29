@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
 
 // Ethereum mainnet assets
 address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
@@ -17,7 +17,7 @@ address constant FLUID_USDC = 0x9Fb7b4477576Fe5B32be4C1843aFB1e55F251B33;
 address constant FLUID_USDT = 0x5C20B550819128074FD538Edf79791733ccEdd18;
 address constant FLUID_WETH = 0x90551c1795392094FE6D29B758EcCD233cFAa260;
 
-/// @notice Fork test for Fluid Lending fTokens through ERC4626MultiStrategy on Ethereum mainnet.
+/// @notice Fork test for Fluid Lending fTokens through ERC4626MultiStrategyV1_2 on Ethereum mainnet.
 ///         Fluid is a single-market-per-asset fit here, so the suite focuses on
 ///         same-asset ERC-4626 compatibility, live maxWithdraw semantics, and
 ///         asset-specific quirks like USDT approvals and WETH 18-decimal accounting.
@@ -57,7 +57,7 @@ contract FluidERC4626MultiStrategyForkTest is Test {
 
     function test_usdc_singleMarketLifecycle_matchesDirectAccountingAndLiveLiquidity() public {
         AssetConfig memory cfg = _usdcConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDC", true);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDC", true);
 
         uint256 allocationAmount = cfg.depositAmount - cfg.idleReserve;
         _depositIntoStrategy(strategy, cfg, cfg.depositAmount);
@@ -94,7 +94,7 @@ contract FluidERC4626MultiStrategyForkTest is Test {
 
     function test_usdt_nonStandardApprove_partialDeallocateAndEmergencyWithdraw() public {
         AssetConfig memory cfg = _usdtConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDT", false);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDT", false);
 
         assertEq(IERC20(cfg.asset).allowance(vaultAddr, address(strategy)), type(uint256).max);
         assertEq(IERC20(cfg.asset).allowance(address(strategy), cfg.fToken), type(uint256).max);
@@ -127,7 +127,7 @@ contract FluidERC4626MultiStrategyForkTest is Test {
 
     function test_weth_18Decimals_supportsCappedWithdrawAndHealthyState() public {
         AssetConfig memory cfg = _wethConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid WETH", false);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid WETH", false);
 
         assertTrue(strategy.isHealthy());
 
@@ -149,30 +149,30 @@ contract FluidERC4626MultiStrategyForkTest is Test {
 
     function test_allocate_revertsIfNotKeeper() public {
         AssetConfig memory cfg = _usdcConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDC ACL", false);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDC ACL", false);
 
         _depositIntoStrategy(strategy, cfg, cfg.depositAmount / 2);
 
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotKeeper.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotKeeper.selector);
         strategy.allocate(cfg.fToken, cfg.depositAmount / 4);
     }
 
     function test_allocate_revertsIfInsufficientIdle() public {
         AssetConfig memory cfg = _usdcConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDC Idle Check", false);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDC Idle Check", false);
 
         uint256 idle = cfg.depositAmount / 2;
         _depositIntoStrategy(strategy, cfg, idle);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.InsufficientIdle.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.InsufficientIdle.selector);
         strategy.allocate(cfg.fToken, idle + 1);
     }
 
     function test_removeSubVault_revertsWhilePositionActive() public {
         AssetConfig memory cfg = _usdcConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDC Active Remove", false);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDC Active Remove", false);
 
         _depositIntoStrategy(strategy, cfg, cfg.depositAmount / 2);
 
@@ -180,13 +180,13 @@ contract FluidERC4626MultiStrategyForkTest is Test {
         strategy.allocate(cfg.fToken, cfg.depositAmount / 2);
 
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultHasActivePosition.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultHasActivePosition.selector);
         strategy.removeSubVault(cfg.fToken);
     }
 
     function test_freeze_thenUnfreeze_preventsThenAllowsAllocation_onFluidUSDC() public {
         AssetConfig memory cfg = _usdcConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDC Freeze", false);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDC Freeze", false);
 
         uint256 allocationAmount = cfg.depositAmount / 2;
         _depositIntoStrategy(strategy, cfg, allocationAmount);
@@ -195,7 +195,7 @@ contract FluidERC4626MultiStrategyForkTest is Test {
         strategy.freezeSubVaultDeposits(cfg.fToken);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.DepositsFrozen.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.DepositsFrozen.selector);
         strategy.allocate(cfg.fToken, allocationAmount);
 
         vm.prank(adminAddr);
@@ -209,7 +209,7 @@ contract FluidERC4626MultiStrategyForkTest is Test {
 
     function test_recallFreezeUnfreezeAndRemoveFlow_onFluidUSDC() public {
         AssetConfig memory cfg = _usdcConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDC Recall", false);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDC Recall", false);
 
         uint256 allocationAmount = cfg.depositAmount - cfg.idleReserve;
         _depositIntoStrategy(strategy, cfg, cfg.depositAmount);
@@ -238,7 +238,7 @@ contract FluidERC4626MultiStrategyForkTest is Test {
 
     function test_transferAdmin_acceptAdmin_roundTrip_onFluidUSDC() public {
         AssetConfig memory cfg = _usdcConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDC Admin", true);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDC Admin", true);
         address newAdmin = makeAddr("newAdmin");
 
         vm.prank(adminAddr);
@@ -253,43 +253,43 @@ contract FluidERC4626MultiStrategyForkTest is Test {
         assertEq(strategy.pendingAdmin(), address(0));
 
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.NotAdmin.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotAdmin.selector);
         strategy.setKeeper(randomUser);
     }
 
     function test_addSubVault_revertsOnCrossAssetFluidFToken() public {
         AssetConfig memory cfg = _usdcConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDC Asset Check", false);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDC Asset Check", false);
 
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.AssetMismatch.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.AssetMismatch.selector);
         strategy.addSubVault(FLUID_WETH);
     }
 
     function test_sweepReward_revertsIfNotVault_onFluidUSDC() public {
         AssetConfig memory cfg = _usdcConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDC Sweep ACL", true);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDC Sweep ACL", true);
 
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotVault.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotVault.selector);
         strategy.sweepReward(address(0x1), vaultAddr);
     }
 
     function test_sweepReward_revertsOnAsset_onFluidUSDC() public {
         AssetConfig memory cfg = _usdcConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDC Sweep Asset", true);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDC Sweep Asset", true);
 
         vm.prank(vaultAddr);
-        vm.expectRevert(ERC4626MultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(cfg.asset, vaultAddr);
     }
 
     function test_sweepReward_revertsOnApprovedSubVaultShare_onFluidUSDC() public {
         AssetConfig memory cfg = _usdcConfig();
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, "Fluid USDC Sweep Share", true);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, "Fluid USDC Sweep Share", true);
 
         vm.prank(vaultAddr);
-        vm.expectRevert(ERC4626MultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(cfg.fToken, vaultAddr);
     }
 
@@ -305,12 +305,12 @@ contract FluidERC4626MultiStrategyForkTest is Test {
         bool seedInitial
     )
         internal
-        returns (ERC4626MultiStrategy strategy)
+        returns (ERC4626MultiStrategyV1_2 strategy)
     {
         address[] memory initialSubVaults = new address[](seedInitial ? 1 : 0);
         if (seedInitial) initialSubVaults[0] = cfg.fToken;
 
-        strategy = new ERC4626MultiStrategy(cfg.asset, vaultAddr, adminAddr, strategyName, 16, initialSubVaults);
+        strategy = new ERC4626MultiStrategyV1_2(cfg.asset, vaultAddr, adminAddr, strategyName, 16, initialSubVaults);
 
         vm.prank(adminAddr);
         strategy.setKeeper(keeperAddr);
@@ -324,7 +324,7 @@ contract FluidERC4626MultiStrategyForkTest is Test {
         IERC20(cfg.asset).forceApprove(address(strategy), type(uint256).max);
     }
 
-    function _depositIntoStrategy(ERC4626MultiStrategy strategy, AssetConfig memory cfg, uint256 amount) internal {
+    function _depositIntoStrategy(ERC4626MultiStrategyV1_2 strategy, AssetConfig memory cfg, uint256 amount) internal {
         deal(cfg.asset, vaultAddr, amount);
         vm.prank(vaultAddr);
         strategy.deposit(amount);
@@ -339,7 +339,7 @@ contract FluidERC4626MultiStrategyForkTest is Test {
     }
 
     function _assertSeededConstructor(AssetConfig memory cfg, string memory strategyName) internal {
-        ERC4626MultiStrategy strategy = _deployStrategy(cfg, strategyName, true);
+        ERC4626MultiStrategyV1_2 strategy = _deployStrategy(cfg, strategyName, true);
 
         assertTrue(strategy.isApproved(cfg.fToken));
         assertEq(strategy.subVaultCount(), 1);
@@ -347,7 +347,7 @@ contract FluidERC4626MultiStrategyForkTest is Test {
         assertEq(IERC20(cfg.asset).allowance(address(strategy), cfg.fToken), type(uint256).max);
     }
 
-    function _directVaultAssets(ERC4626MultiStrategy strategy, address subVault) internal view returns (uint256) {
+    function _directVaultAssets(ERC4626MultiStrategyV1_2 strategy, address subVault) internal view returns (uint256) {
         uint256 shares = IERC4626(subVault).balanceOf(address(strategy));
         if (shares == 0) return 0;
         return IERC4626(subVault).convertToAssets(shares);

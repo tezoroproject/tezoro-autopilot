@@ -6,7 +6,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {MorphoBlueMultiStrategy} from "../../src/strategies/MorphoBlueMultiStrategy.sol";
+import {MorphoBlueMultiStrategyV1_2} from "../../src/strategies/MorphoBlueMultiStrategyV1_2.sol";
 import {IMorpho, MarketParams, MorphoMarket, Position, Id} from "../../src/interfaces/IMorpho.sol";
 
 // ---- Mock ERC-20 ----
@@ -144,7 +144,7 @@ contract TestMockMorpho {
 contract MorphoBlueMultiStrategyTest is Test {
     MorphoTestToken token;
     TestMockMorpho mockMorpho;
-    MorphoBlueMultiStrategy strategy;
+    MorphoBlueMultiStrategyV1_2 strategy;
 
     MarketParams mpA;
     MarketParams mpB;
@@ -165,7 +165,7 @@ contract MorphoBlueMultiStrategyTest is Test {
         token = new MorphoTestToken("USD Coin", "USDC", 6);
         mockMorpho = new TestMockMorpho();
 
-        strategy = new MorphoBlueMultiStrategy(
+        strategy = new MorphoBlueMultiStrategyV1_2(
             address(token),
             address(mockMorpho),
             vaultAddr,
@@ -209,23 +209,23 @@ contract MorphoBlueMultiStrategyTest is Test {
     }
 
     function test_constructor_revertsOnZeroAsset() public {
-        vm.expectRevert(MorphoBlueMultiStrategy.ZeroAddress.selector);
-        new MorphoBlueMultiStrategy(address(0), address(mockMorpho), vaultAddr, adminAddr, "test", 64, new MarketParams[](0));
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.ZeroAddress.selector);
+        new MorphoBlueMultiStrategyV1_2(address(0), address(mockMorpho), vaultAddr, adminAddr, "test", 64, new MarketParams[](0));
     }
 
     function test_constructor_revertsOnZeroMorpho() public {
-        vm.expectRevert(MorphoBlueMultiStrategy.ZeroAddress.selector);
-        new MorphoBlueMultiStrategy(address(token), address(0), vaultAddr, adminAddr, "test", 64, new MarketParams[](0));
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.ZeroAddress.selector);
+        new MorphoBlueMultiStrategyV1_2(address(token), address(0), vaultAddr, adminAddr, "test", 64, new MarketParams[](0));
     }
 
     function test_constructor_revertsOnZeroVault() public {
-        vm.expectRevert(MorphoBlueMultiStrategy.ZeroAddress.selector);
-        new MorphoBlueMultiStrategy(address(token), address(mockMorpho), address(0), adminAddr, "test", 64, new MarketParams[](0));
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.ZeroAddress.selector);
+        new MorphoBlueMultiStrategyV1_2(address(token), address(mockMorpho), address(0), adminAddr, "test", 64, new MarketParams[](0));
     }
 
     function test_constructor_revertsOnZeroAdmin() public {
-        vm.expectRevert(MorphoBlueMultiStrategy.ZeroAddress.selector);
-        new MorphoBlueMultiStrategy(address(token), address(mockMorpho), vaultAddr, address(0), "test", 64, new MarketParams[](0));
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.ZeroAddress.selector);
+        new MorphoBlueMultiStrategyV1_2(address(token), address(mockMorpho), vaultAddr, address(0), "test", 64, new MarketParams[](0));
     }
 
     // ========== Admin: addMarket ==========
@@ -239,13 +239,13 @@ contract MorphoBlueMultiStrategyTest is Test {
     function test_addMarket_revertsIfNotAdmin() public {
         MarketParams memory mp = _makeMarketParams(makeAddr("collC"));
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotAdmin.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotAdmin.selector);
         strategy.addMarket(mp);
     }
 
     function test_addMarket_revertsIfAlreadyApproved() public {
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.MarketAlreadyApproved.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.MarketAlreadyApproved.selector);
         strategy.addMarket(mpA);
     }
 
@@ -258,7 +258,7 @@ contract MorphoBlueMultiStrategyTest is Test {
             lltv: 900000000000000000
         });
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.LoanTokenMismatch.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.LoanTokenMismatch.selector);
         strategy.addMarket(mp);
     }
 
@@ -273,7 +273,7 @@ contract MorphoBlueMultiStrategyTest is Test {
 
         MarketParams memory extra = _makeMarketParams(makeAddr("collExtra"));
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.TooManyMarkets.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.TooManyMarkets.selector);
         strategy.addMarket(extra);
     }
 
@@ -290,13 +290,13 @@ contract MorphoBlueMultiStrategyTest is Test {
     function test_removeMarket_revertsIfNotApproved() public {
         Id unknown = Id.wrap(bytes32(uint256(999)));
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.MarketNotApproved.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.MarketNotApproved.selector);
         strategy.removeMarket(unknown);
     }
 
     function test_removeMarket_revertsIfNotAdmin() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotAdmin.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotAdmin.selector);
         strategy.removeMarket(midA);
     }
 
@@ -309,7 +309,7 @@ contract MorphoBlueMultiStrategyTest is Test {
         strategy.allocate(midA, 500e6);
 
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.MarketHasActivePosition.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.MarketHasActivePosition.selector);
         strategy.removeMarket(midA);
     }
 
@@ -341,13 +341,13 @@ contract MorphoBlueMultiStrategyTest is Test {
 
     function test_setKeeper_revertsOnZero() public {
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.ZeroAddress.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.ZeroAddress.selector);
         strategy.setKeeper(address(0));
     }
 
     function test_setKeeper_revertsIfNotAdmin() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotAdmin.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotAdmin.selector);
         strategy.setKeeper(makeAddr("x"));
     }
 
@@ -368,19 +368,19 @@ contract MorphoBlueMultiStrategyTest is Test {
 
     function test_acceptAdmin_revertsIfNotPending() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotPendingAdmin.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotPendingAdmin.selector);
         strategy.acceptAdmin();
     }
 
     function test_transferAdmin_revertsOnZero() public {
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.ZeroAddress.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.ZeroAddress.selector);
         strategy.transferAdmin(address(0));
     }
 
     function test_transferAdmin_revertsIfNotAdmin() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotAdmin.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotAdmin.selector);
         strategy.transferAdmin(makeAddr("x"));
     }
 
@@ -398,7 +398,7 @@ contract MorphoBlueMultiStrategyTest is Test {
 
     function test_deposit_revertsIfNotVault() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotVault.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotVault.selector);
         strategy.deposit(100e6);
     }
 
@@ -418,14 +418,14 @@ contract MorphoBlueMultiStrategyTest is Test {
 
     function test_allocate_revertsIfNotKeeper() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotKeeper.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotKeeper.selector);
         strategy.allocate(midA, 100e6);
     }
 
     function test_allocate_revertsIfNotApproved() public {
         Id unknown = Id.wrap(bytes32(uint256(999)));
         vm.prank(keeperAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.MarketNotApproved.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.MarketNotApproved.selector);
         strategy.allocate(unknown, 100e6);
     }
 
@@ -435,7 +435,7 @@ contract MorphoBlueMultiStrategyTest is Test {
         strategy.deposit(100e6);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.InsufficientIdle.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.InsufficientIdle.selector);
         strategy.allocate(midA, 200e6);
     }
 
@@ -456,14 +456,14 @@ contract MorphoBlueMultiStrategyTest is Test {
 
     function test_deallocate_revertsIfNotKeeper() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotKeeper.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotKeeper.selector);
         strategy.deallocate(midA, 100e6);
     }
 
     function test_deallocate_revertsIfNotApproved() public {
         Id unknown = Id.wrap(bytes32(uint256(999)));
         vm.prank(keeperAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.MarketNotApproved.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.MarketNotApproved.selector);
         strategy.deallocate(unknown, 100e6);
     }
 
@@ -527,7 +527,7 @@ contract MorphoBlueMultiStrategyTest is Test {
 
     function test_withdraw_revertsIfNotVault() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotVault.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotVault.selector);
         strategy.withdraw(100e6);
     }
 
@@ -547,7 +547,7 @@ contract MorphoBlueMultiStrategyTest is Test {
         // Withdraw more than idle — should emit WithdrawFailed for A, still get B
         vm.prank(vaultAddr);
         vm.expectEmit(true, false, false, false);
-        emit MorphoBlueMultiStrategy.WithdrawFailed(midA);
+        emit MorphoBlueMultiStrategyV1_2.WithdrawFailed(midA);
         uint256 withdrawn = strategy.withdraw(800e6);
 
         // Should get idle (200) + midB (400) = 600
@@ -576,7 +576,7 @@ contract MorphoBlueMultiStrategyTest is Test {
 
     function test_emergencyWithdraw_revertsIfNotVault() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotVault.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotVault.selector);
         strategy.emergencyWithdraw();
     }
 
@@ -595,7 +595,7 @@ contract MorphoBlueMultiStrategyTest is Test {
 
         vm.prank(vaultAddr);
         vm.expectEmit(true, false, false, false);
-        emit MorphoBlueMultiStrategy.WithdrawFailed(midA);
+        emit MorphoBlueMultiStrategyV1_2.WithdrawFailed(midA);
         uint256 withdrawn = strategy.emergencyWithdraw();
 
         // Should get idle (200) + midB (400) = 600
@@ -674,13 +674,13 @@ contract MorphoBlueMultiStrategyTest is Test {
 
     function test_sweepReward_revertsOnAsset() public {
         vm.prank(vaultAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(address(token), makeAddr("to"));
     }
 
     function test_sweepReward_revertsIfNotVault() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotVault.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotVault.selector);
         strategy.sweepReward(makeAddr("token"), makeAddr("to"));
     }
 
@@ -707,7 +707,7 @@ contract MorphoBlueMultiStrategyTest is Test {
         // recallMarket should not revert, should emit WithdrawFailed and still freeze
         vm.prank(adminAddr);
         vm.expectEmit(true, false, false, false);
-        emit MorphoBlueMultiStrategy.WithdrawFailed(midA);
+        emit MorphoBlueMultiStrategyV1_2.WithdrawFailed(midA);
         strategy.recallMarket(midA);
 
         assertTrue(strategy.depositFrozenMarkets(midA));

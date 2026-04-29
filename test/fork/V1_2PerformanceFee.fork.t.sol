@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
 
 /// @notice Minimal interface to call accrueAllInterest on Morpho strategies
@@ -18,13 +18,13 @@ interface IMorphoStrategy {
 ///         - Fee amount is ~15% of profit
 ///         - HWM advances correctly
 ///         - User gets principal + 85% of yield
-contract V1_1PerformanceFee is Test {
+contract V1_2PerformanceFee is Test {
     IERC20 constant USDC = IERC20(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48);
 
     // v1.1 deployed vault addresses (Ethereum, 2026-03-07)
-    TezoroV1_1 constant VAULT_A = TezoroV1_1(0x7cc42747862ecACe79FA89BeFcB29C94d2558dEC);
-    TezoroV1_1 constant VAULT_B = TezoroV1_1(0xD0F2812F57D284c0d30Ddd8f73b146Ef0cD5a25c);
-    TezoroV1_1 constant VAULT_C = TezoroV1_1(0xa139C6a7dd1Bd76Ae3FBCCF4F8bEbA5C4f26513d);
+    TezoroV1_2 constant VAULT_A = TezoroV1_2(0x7cc42747862ecACe79FA89BeFcB29C94d2558dEC);
+    TezoroV1_2 constant VAULT_B = TezoroV1_2(0xD0F2812F57D284c0d30Ddd8f73b146Ef0cD5a25c);
+    TezoroV1_2 constant VAULT_C = TezoroV1_2(0xa139C6a7dd1Bd76Ae3FBCCF4F8bEbA5C4f26513d);
 
     uint256 constant BPS = 10_000;
     uint256 constant DEPOSIT = 50_000e6; // 50k USDC
@@ -59,7 +59,7 @@ contract V1_1PerformanceFee is Test {
     // -----------------------------------------------------------------------
 
     function test_configCheck_allVaults() public view {
-        TezoroV1_1[3] memory vaults = [VAULT_A, VAULT_B, VAULT_C];
+        TezoroV1_2[3] memory vaults = [VAULT_A, VAULT_B, VAULT_C];
         for (uint256 i = 0; i < vaults.length; i++) {
             assertEq(vaults[i].performanceFeeBps(), 1_500, "Fee should be 15%");
             assertTrue(vaults[i].feeRecipient() != address(0), "Fee recipient should be set");
@@ -71,7 +71,7 @@ contract V1_1PerformanceFee is Test {
     // Core verification logic
     // -----------------------------------------------------------------------
 
-    function _verifyFeeAccrual(TezoroV1_1 vault, string memory label) internal {
+    function _verifyFeeAccrual(TezoroV1_2 vault, string memory label) internal {
         address keeper = vault.keeper();
         address feeRecipient = vault.feeRecipient();
 
@@ -114,7 +114,7 @@ contract V1_1PerformanceFee is Test {
     }
 
     function _assertFeeCorrectness(
-        TezoroV1_1 vault,
+        TezoroV1_2 vault,
         string memory label,
         uint256 hwmBefore,
         uint256 feeSharesBefore,
@@ -145,7 +145,7 @@ contract V1_1PerformanceFee is Test {
         assertLe(feePercent, 2_000, string.concat(label, ": fee should be <= 20% of yield"));
     }
 
-    function _assertRedeemProfitable(TezoroV1_1 vault, string memory label) internal {
+    function _assertRedeemProfitable(TezoroV1_2 vault, string memory label) internal {
         uint256 aliceShares = vault.balanceOf(alice);
         assertGt(aliceShares, 0, string.concat(label, ": alice should have shares"));
 
@@ -159,7 +159,7 @@ contract V1_1PerformanceFee is Test {
 
     /// @dev Try to call accrueAllInterest() on each strategy.
     ///      Non-Morpho strategies don't have this function, so we use try/catch.
-    function _accrueInterestOnStrategies(TezoroV1_1 vault) internal {
+    function _accrueInterestOnStrategies(TezoroV1_2 vault) internal {
         IStrategy[] memory strategies = vault.getStrategies();
         for (uint256 i = 0; i < strategies.length; i++) {
             try IMorphoStrategy(address(strategies[i])).accrueAllInterest() {} catch {}

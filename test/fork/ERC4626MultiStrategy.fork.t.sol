@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
 
 // Real Ethereum mainnet addresses
 address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
@@ -14,11 +14,11 @@ address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 address constant STEAKHOUSE_USDC = 0xBEEF01735c132Ada46AA9aA4c54623cAA92A64CB;
 address constant GAUNTLET_USDC_CORE = 0x8eB67A509616cd6A7c1B3c8C21D48FF57df3d458;
 
-/// @notice Fork test for ERC4626MultiStrategy against real MetaMorpho vaults on Ethereum mainnet.
+/// @notice Fork test for ERC4626MultiStrategyV1_2 against real MetaMorpho vaults on Ethereum mainnet.
 contract ERC4626MultiStrategyForkTest is Test {
     using SafeERC20 for IERC20;
 
-    ERC4626MultiStrategy strategy;
+    ERC4626MultiStrategyV1_2 strategy;
 
     address vaultAddr = makeAddr("vault");
     address adminAddr = makeAddr("admin");
@@ -29,7 +29,7 @@ contract ERC4626MultiStrategyForkTest is Test {
     function setUp() public {
         vm.createSelectFork("ethereum");
 
-        strategy = new ERC4626MultiStrategy(USDC, vaultAddr, adminAddr, "MetaMorpho USDC", 64, new address[](0));
+        strategy = new ERC4626MultiStrategyV1_2(USDC, vaultAddr, adminAddr, "MetaMorpho USDC", 64, new address[](0));
 
         vm.startPrank(adminAddr);
         strategy.setKeeper(keeperAddr);
@@ -210,7 +210,7 @@ contract ERC4626MultiStrategyForkTest is Test {
         // Fluid WETH fToken is ERC-4626 with WETH as asset
         address fluidWETH = 0x90551c1795392094FE6D29B758EcCD233cFAa260;
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.AssetMismatch.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.AssetMismatch.selector);
         strategy.addSubVault(fluidWETH);
     }
 
@@ -222,7 +222,7 @@ contract ERC4626MultiStrategyForkTest is Test {
         strategy.deposit(DEPOSIT_AMOUNT);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultNotApproved.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultNotApproved.selector);
         strategy.allocate(STEAKHOUSE_USDC, 50_000e6);
     }
 
@@ -340,7 +340,7 @@ contract ERC4626MultiStrategyForkTest is Test {
         strategy.deposit(DEPOSIT_AMOUNT);
 
         vm.prank(vaultAddr);
-        vm.expectRevert(ERC4626MultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(USDC, vaultAddr);
     }
 
@@ -350,7 +350,7 @@ contract ERC4626MultiStrategyForkTest is Test {
 
         // STEAKHOUSE_USDC is an approved sub-vault, so isApproved[STEAKHOUSE_USDC] == true
         vm.prank(vaultAddr);
-        vm.expectRevert(ERC4626MultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(STEAKHOUSE_USDC, vaultAddr);
     }
 

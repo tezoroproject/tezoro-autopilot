@@ -4,12 +4,12 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
-import {AaveV3Strategy} from "../../src/strategies/AaveV3Strategy.sol";
-import {CompoundV3Strategy} from "../../src/strategies/CompoundV3Strategy.sol";
-import {MorphoBlueMultiStrategy} from "../../src/strategies/MorphoBlueMultiStrategy.sol";
-import {FluidStrategy} from "../../src/strategies/FluidStrategy.sol";
+import {AaveV3StrategyV1_2} from "../../src/strategies/AaveV3StrategyV1_2.sol";
+import {CompoundV3StrategyV1_2} from "../../src/strategies/CompoundV3StrategyV1_2.sol";
+import {MorphoBlueMultiStrategyV1_2} from "../../src/strategies/MorphoBlueMultiStrategyV1_2.sol";
+import {FluidStrategyV1_2} from "../../src/strategies/FluidStrategyV1_2.sol";
 import {IMorpho, MarketParams, Id} from "../../src/interfaces/IMorpho.sol";
 
 // Ethereum mainnet addresses
@@ -31,7 +31,7 @@ address constant INV_COMP = 0xc00e94Cb662C3520282E6f5717214004A7f26888;
 contract VaultHandler is Test {
     using SafeERC20 for IERC20;
 
-    TezoroV1_1 public vault;
+    TezoroV1_2 public vault;
     IERC20 public token;
     address public admin;
     address public keeper;
@@ -45,7 +45,7 @@ contract VaultHandler is Test {
     uint256 public ghost_lastSharePrice;
 
     constructor(
-        TezoroV1_1 vault_,
+        TezoroV1_2 vault_,
         address token_,
         address admin_,
         address keeper_,
@@ -236,7 +236,7 @@ contract VaultHandler is Test {
 contract VaultInvariantTest is Test {
     using SafeERC20 for IERC20;
 
-    TezoroV1_1 public vault;
+    TezoroV1_2 public vault;
     VaultHandler public handler;
 
     address public admin = makeAddr("admin");
@@ -257,7 +257,7 @@ contract VaultInvariantTest is Test {
         address token = INV_USDC;
 
         // Deploy vault
-        vault = new TezoroV1_1(
+        vault = new TezoroV1_2(
             IERC20(token),
             "Tezoro USDC-A",
             "tUSDC-A",
@@ -269,18 +269,18 @@ contract VaultInvariantTest is Test {
 
         // Deploy strategies
         address aaveAToken = INV_A_USDC;
-        AaveV3Strategy aaveStrategy = new AaveV3Strategy(token, INV_AAVE_POOL, aaveAToken, address(vault), INV_AAVE_REWARDS);
-        CompoundV3Strategy compoundStrategy = new CompoundV3Strategy(token, INV_COMPOUND_USDC, address(vault), INV_COMET_REWARDS, INV_COMP);
+        AaveV3StrategyV1_2 aaveStrategy = new AaveV3StrategyV1_2(token, INV_AAVE_POOL, aaveAToken, address(vault), INV_AAVE_REWARDS);
+        CompoundV3StrategyV1_2 compoundStrategy = new CompoundV3StrategyV1_2(token, INV_COMPOUND_USDC, address(vault), INV_COMET_REWARDS, INV_COMP);
 
         // Get Spark aToken dynamically
         (bool ok_, bytes memory data_) = INV_SPARK_POOL.staticcall(abi.encodeWithSignature("getReserveData(address)", token));
         require(ok_, "getReserveData failed");
         address spToken;
         assembly { spToken := mload(add(data_, 288)) }
-        AaveV3Strategy sparkStrategy = new AaveV3Strategy(token, INV_SPARK_POOL, spToken, address(vault), INV_SPARK_REWARDS);
+        AaveV3StrategyV1_2 sparkStrategy = new AaveV3StrategyV1_2(token, INV_SPARK_POOL, spToken, address(vault), INV_SPARK_REWARDS);
 
-        MorphoBlueMultiStrategy morphoStrategy = new MorphoBlueMultiStrategy(token, INV_MORPHO, address(vault), admin, "Morpho Multi", 64, new MarketParams[](0));
-        FluidStrategy fluidStrategy = new FluidStrategy(token, INV_FLUID_USDC, address(vault));
+        MorphoBlueMultiStrategyV1_2 morphoStrategy = new MorphoBlueMultiStrategyV1_2(token, INV_MORPHO, address(vault), admin, "Morpho Multi", 64, new MarketParams[](0));
+        FluidStrategyV1_2 fluidStrategy = new FluidStrategyV1_2(token, INV_FLUID_USDC, address(vault));
 
         // Add strategies and set allocation via rebalance (97% / 5 = 19.4% each)
         vm.startPrank(admin);

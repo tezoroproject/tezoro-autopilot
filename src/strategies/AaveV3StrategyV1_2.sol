@@ -7,11 +7,11 @@ import {IStrategy} from "../interfaces/IStrategy.sol";
 import {IAaveV3Pool} from "../interfaces/IAaveV3Pool.sol";
 import {IRewardsController} from "../interfaces/IRewardsController.sol";
 
-/// @title AaveV3Strategy
+/// @title AaveV3StrategyV1_2
 /// @notice Strategy adapter for Aave V3 lending pool.
 ///         Deposits and withdraws a single asset. Reports balance via aToken.
 ///         Harvests incentive rewards (ARB, OP, etc.) via RewardsController.
-contract AaveV3Strategy is IStrategy {
+contract AaveV3StrategyV1_2 is IStrategy {
     using SafeERC20 for IERC20;
 
     address public immutable override asset;
@@ -101,7 +101,7 @@ contract AaveV3Strategy is IStrategy {
         return total;
     }
 
-    /// @notice Sweep non-asset reward tokens to a recipient (e.g. RewardsModule).
+    /// @notice Sweep non-asset reward tokens to a recipient (e.g. RewardsModuleV1_2).
     function sweepReward(address rewardToken, address to) external override onlyVault returns (uint256 amount) {
         if (rewardToken == asset || rewardToken == address(aToken)) revert CannotSweepAsset();
         amount = IERC20(rewardToken).balanceOf(address(this));

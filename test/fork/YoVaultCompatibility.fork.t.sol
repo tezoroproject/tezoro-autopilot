@@ -5,13 +5,13 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
 
 // Ethereum mainnet
 address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
 address constant YO_USD = 0x0000000f2eB9f69274678c76222B35eEc7588a65;
 
-/// @notice Fork test: YO.xyz vault compatibility with ERC4626MultiStrategy.
+/// @notice Fork test: YO.xyz vault compatibility with ERC4626MultiStrategyV1_2.
 ///         YO vaults don't implement withdraw() — only redeem().
 ///         Tests verify the redeem-fallback in the strategy handles this correctly.
 contract YoVaultCompatibilityTest is Test {
@@ -75,7 +75,7 @@ contract YoVaultCompatibilityTest is Test {
         assertGt(received, 0, "should receive assets via redeem");
     }
 
-    // ========== ERC4626MultiStrategy integration ==========
+    // ========== ERC4626MultiStrategyV1_2 integration ==========
 
     function test_strategy_fullLifecycle() public {
         address vaultAddr = makeAddr("vault");
@@ -83,7 +83,7 @@ contract YoVaultCompatibilityTest is Test {
         address keeperAddr = makeAddr("keeper");
 
         // Deploy strategy with YO vault as sub-vault
-        ERC4626MultiStrategy strategy = new ERC4626MultiStrategy(
+        ERC4626MultiStrategyV1_2 strategy = new ERC4626MultiStrategyV1_2(
             USDC, vaultAddr, adminAddr, "YO USD", 8, new address[](0)
         );
 
@@ -124,7 +124,7 @@ contract YoVaultCompatibilityTest is Test {
         address adminAddr = makeAddr("admin");
         address keeperAddr = makeAddr("keeper");
 
-        ERC4626MultiStrategy strategy = new ERC4626MultiStrategy(
+        ERC4626MultiStrategyV1_2 strategy = new ERC4626MultiStrategyV1_2(
             USDC, vaultAddr, adminAddr, "YO USD", 8, new address[](0)
         );
 

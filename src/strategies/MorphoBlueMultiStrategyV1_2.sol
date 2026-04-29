@@ -8,11 +8,11 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {IStrategy} from "../interfaces/IStrategy.sol";
 import {IMorpho, MarketParams, MorphoMarket, Position, Id} from "../interfaces/IMorpho.sol";
 
-/// @title MorphoBlueMultiStrategy
+/// @title MorphoBlueMultiStrategyV1_2
 /// @notice Strategy adapter that wraps multiple whitelisted Morpho Blue lending markets.
 ///         The vault calls standard IStrategy methods (deposit/withdraw).
 ///         A keeper allocates/deallocates idle funds across markets.
-contract MorphoBlueMultiStrategy is IStrategy, ReentrancyGuard {
+contract MorphoBlueMultiStrategyV1_2 is IStrategy, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using Math for uint256;
 

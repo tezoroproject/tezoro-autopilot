@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC4626, IERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
 
 // ---- Mock ERC-20 token (mintable) ----
 
@@ -37,7 +37,7 @@ contract ERC4626MultiStrategyTest is Test {
     MockToken token;
     MockVault4626 subVaultA;
     MockVault4626 subVaultB;
-    ERC4626MultiStrategy strategy;
+    ERC4626MultiStrategyV1_2 strategy;
 
     address vaultAddr;
     address adminAddr;
@@ -54,7 +54,7 @@ contract ERC4626MultiStrategyTest is Test {
         subVaultA = new MockVault4626(IERC20(address(token)));
         subVaultB = new MockVault4626(IERC20(address(token)));
 
-        strategy = new ERC4626MultiStrategy(address(token), vaultAddr, adminAddr, "MetaMorpho USDC", 20, new address[](0));
+        strategy = new ERC4626MultiStrategyV1_2(address(token), vaultAddr, adminAddr, "MetaMorpho USDC", 20, new address[](0));
 
         // Admin sets keeper
         vm.prank(adminAddr);
@@ -76,18 +76,18 @@ contract ERC4626MultiStrategyTest is Test {
     }
 
     function test_constructor_revertsOnZeroAsset() public {
-        vm.expectRevert(ERC4626MultiStrategy.ZeroAddress.selector);
-        new ERC4626MultiStrategy(address(0), vaultAddr, adminAddr, "test", 64, new address[](0));
+        vm.expectRevert(ERC4626MultiStrategyV1_2.ZeroAddress.selector);
+        new ERC4626MultiStrategyV1_2(address(0), vaultAddr, adminAddr, "test", 64, new address[](0));
     }
 
     function test_constructor_revertsOnZeroVault() public {
-        vm.expectRevert(ERC4626MultiStrategy.ZeroAddress.selector);
-        new ERC4626MultiStrategy(address(token), address(0), adminAddr, "test", 64, new address[](0));
+        vm.expectRevert(ERC4626MultiStrategyV1_2.ZeroAddress.selector);
+        new ERC4626MultiStrategyV1_2(address(token), address(0), adminAddr, "test", 64, new address[](0));
     }
 
     function test_constructor_revertsOnZeroAdmin() public {
-        vm.expectRevert(ERC4626MultiStrategy.ZeroAddress.selector);
-        new ERC4626MultiStrategy(address(token), vaultAddr, address(0), "test", 64, new address[](0));
+        vm.expectRevert(ERC4626MultiStrategyV1_2.ZeroAddress.selector);
+        new ERC4626MultiStrategyV1_2(address(token), vaultAddr, address(0), "test", 64, new address[](0));
     }
 
     // ========== Admin: addSubVault ==========
@@ -101,13 +101,13 @@ contract ERC4626MultiStrategyTest is Test {
     function test_addSubVault_revertsIfNotAdmin() public {
         MockVault4626 newVault = new MockVault4626(IERC20(address(token)));
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotAdmin.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotAdmin.selector);
         strategy.addSubVault(address(newVault));
     }
 
     function test_addSubVault_revertsIfAlreadyApproved() public {
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultAlreadyApproved.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultAlreadyApproved.selector);
         strategy.addSubVault(address(subVaultA));
     }
 
@@ -115,13 +115,13 @@ contract ERC4626MultiStrategyTest is Test {
         MockToken otherToken = new MockToken("Other", "OTH", 18);
         MockVault4626 wrongVault = new MockVault4626(IERC20(address(otherToken)));
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.AssetMismatch.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.AssetMismatch.selector);
         strategy.addSubVault(address(wrongVault));
     }
 
     function test_addSubVault_revertsOnZeroAddress() public {
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.ZeroAddress.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.ZeroAddress.selector);
         strategy.addSubVault(address(0));
     }
 
@@ -137,13 +137,13 @@ contract ERC4626MultiStrategyTest is Test {
 
     function test_removeSubVault_revertsIfNotApproved() public {
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultNotApproved.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultNotApproved.selector);
         strategy.removeSubVault(makeAddr("unknown"));
     }
 
     function test_removeSubVault_revertsIfNotAdmin() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotAdmin.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotAdmin.selector);
         strategy.removeSubVault(address(subVaultA));
     }
 
@@ -158,13 +158,13 @@ contract ERC4626MultiStrategyTest is Test {
 
     function test_setKeeper_revertsOnZero() public {
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.ZeroAddress.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.ZeroAddress.selector);
         strategy.setKeeper(address(0));
     }
 
     function test_setKeeper_revertsIfNotAdmin() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotAdmin.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotAdmin.selector);
         strategy.setKeeper(makeAddr("x"));
     }
 
@@ -185,19 +185,19 @@ contract ERC4626MultiStrategyTest is Test {
 
     function test_acceptAdmin_revertsIfNotPending() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotPendingAdmin.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotPendingAdmin.selector);
         strategy.acceptAdmin();
     }
 
     function test_transferAdmin_revertsOnZero() public {
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.ZeroAddress.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.ZeroAddress.selector);
         strategy.transferAdmin(address(0));
     }
 
     function test_transferAdmin_revertsIfNotAdmin() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotAdmin.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotAdmin.selector);
         strategy.transferAdmin(makeAddr("x"));
     }
 
@@ -215,7 +215,7 @@ contract ERC4626MultiStrategyTest is Test {
 
     function test_deposit_revertsIfNotVault() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotVault.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotVault.selector);
         strategy.deposit(100e6);
     }
 
@@ -235,14 +235,14 @@ contract ERC4626MultiStrategyTest is Test {
 
     function test_allocate_revertsIfNotKeeper() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotKeeper.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotKeeper.selector);
         strategy.allocate(address(subVaultA), 100e6);
     }
 
     function test_allocate_revertsIfNotApproved() public {
         address unknown = makeAddr("unknown");
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultNotApproved.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultNotApproved.selector);
         strategy.allocate(unknown, 100e6);
     }
 
@@ -252,7 +252,7 @@ contract ERC4626MultiStrategyTest is Test {
         strategy.deposit(100e6);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.InsufficientIdle.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.InsufficientIdle.selector);
         strategy.allocate(address(subVaultA), 200e6);
     }
 
@@ -274,14 +274,14 @@ contract ERC4626MultiStrategyTest is Test {
 
     function test_deallocate_revertsIfNotKeeper() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotKeeper.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotKeeper.selector);
         strategy.deallocate(address(subVaultA), 100e6);
     }
 
     function test_deallocate_revertsIfNotApproved() public {
         address unknown = makeAddr("unknown");
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultNotApproved.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultNotApproved.selector);
         strategy.deallocate(unknown, 100e6);
     }
 
@@ -347,7 +347,7 @@ contract ERC4626MultiStrategyTest is Test {
 
     function test_withdraw_revertsIfNotVault() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotVault.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotVault.selector);
         strategy.withdraw(100e6);
     }
 
@@ -374,7 +374,7 @@ contract ERC4626MultiStrategyTest is Test {
 
     function test_emergencyWithdraw_revertsIfNotVault() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotVault.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotVault.selector);
         strategy.emergencyWithdraw();
     }
 
@@ -436,13 +436,13 @@ contract ERC4626MultiStrategyTest is Test {
 
     function test_sweepReward_revertsOnAsset() public {
         vm.prank(vaultAddr);
-        vm.expectRevert(ERC4626MultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(address(token), makeAddr("to"));
     }
 
     function test_sweepReward_revertsIfNotVault() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotVault.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotVault.selector);
         strategy.sweepReward(makeAddr("token"), makeAddr("to"));
     }
 
@@ -487,7 +487,7 @@ contract ERC4626MultiStrategyTest is Test {
         // 21st should revert
         MockVault4626 extra = new MockVault4626(IERC20(address(token)));
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.TooManySubVaults.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.TooManySubVaults.selector);
         strategy.addSubVault(address(extra));
     }
 
@@ -502,7 +502,7 @@ contract ERC4626MultiStrategyTest is Test {
         strategy.allocate(address(subVaultA), 500e6);
 
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultHasActivePosition.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultHasActivePosition.selector);
         strategy.removeSubVault(address(subVaultA));
     }
 
@@ -530,7 +530,7 @@ contract ERC4626MultiStrategyTest is Test {
         // subVaultA is an approved sub-vault — its address is a share token
         // sweepReward should block sweeping it (would drain positions)
         vm.prank(vaultAddr);
-        vm.expectRevert(ERC4626MultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(address(subVaultA), makeAddr("to"));
     }
 
@@ -560,7 +560,7 @@ contract ERC4626MultiStrategyTest is Test {
         // but still succeed partially via subVaultA
         vm.prank(vaultAddr);
         vm.expectEmit(true, false, false, false);
-        emit ERC4626MultiStrategy.WithdrawFailed(address(brokenVault));
+        emit ERC4626MultiStrategyV1_2.WithdrawFailed(address(brokenVault));
         uint256 withdrawn = strategy.withdraw(800e6);
 
         // Should get idle (200) + subVaultA (400) = 600, broken vault skipped
@@ -590,7 +590,7 @@ contract ERC4626MultiStrategyTest is Test {
         // emergencyWithdraw should recover subVaultA + idle, skip broken
         vm.prank(vaultAddr);
         vm.expectEmit(true, false, false, false);
-        emit ERC4626MultiStrategy.WithdrawFailed(address(brokenVault));
+        emit ERC4626MultiStrategyV1_2.WithdrawFailed(address(brokenVault));
         uint256 withdrawn = strategy.emergencyWithdraw();
 
         // Should get idle (200) + subVaultA (400) = 600
@@ -618,7 +618,7 @@ contract ERC4626MultiStrategyTest is Test {
         // recallSubVault should not revert, should emit WithdrawFailed and still freeze
         vm.prank(adminAddr);
         vm.expectEmit(true, false, false, false);
-        emit ERC4626MultiStrategy.WithdrawFailed(address(brokenVault));
+        emit ERC4626MultiStrategyV1_2.WithdrawFailed(address(brokenVault));
         strategy.recallSubVault(address(brokenVault));
 
         assertTrue(strategy.depositFrozenSubVaults(address(brokenVault)));

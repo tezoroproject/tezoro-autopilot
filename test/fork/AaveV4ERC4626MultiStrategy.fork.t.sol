@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ERC4626MultiStrategy} from "../../src/strategies/ERC4626MultiStrategy.sol";
+import {ERC4626MultiStrategyV1_2} from "../../src/strategies/ERC4626MultiStrategyV1_2.sol";
 
 // Ethereum mainnet
 address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
@@ -17,11 +17,11 @@ address constant AAVE_V4_PLUS_USDC = 0xc94bdd83D2c7655C280655D60954e79E88D4F949;
 address constant AAVE_V4_PRIME_USDC = 0x486415fb1F8b062c89ED548f871cf64304AACb31;
 bytes4 constant AAVE_V4_ADD_CAP_EXCEEDED_SELECTOR = bytes4(keccak256("AddCapExceeded(uint256)"));
 
-/// @notice Fork test for Aave V4 tokenization spokes through ERC4626MultiStrategy on Ethereum mainnet.
+/// @notice Fork test for Aave V4 tokenization spokes through ERC4626MultiStrategyV1_2 on Ethereum mainnet.
 contract AaveV4ERC4626MultiStrategyForkTest is Test {
     using SafeERC20 for IERC20;
 
-    ERC4626MultiStrategy strategy;
+    ERC4626MultiStrategyV1_2 strategy;
 
     address vaultAddr = makeAddr("vault");
     address adminAddr = makeAddr("admin");
@@ -86,7 +86,7 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
 
         vm.prank(keeperAddr);
         (bool success, bytes memory revertData) =
-            address(strategy).call(abi.encodeCall(ERC4626MultiStrategy.allocate, (AAVE_V4_PLUS_USDC, amount)));
+            address(strategy).call(abi.encodeCall(ERC4626MultiStrategyV1_2.allocate, (AAVE_V4_PLUS_USDC, amount)));
 
         assertFalse(success);
         assertEq(_revertSelector(revertData), AAVE_V4_ADD_CAP_EXCEEDED_SELECTOR);
@@ -112,7 +112,7 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
         uint256 tested;
 
         for (uint256 i = 0; i < spokes.length; i++) {
-            ERC4626MultiStrategy localStrategy =
+            ERC4626MultiStrategyV1_2 localStrategy =
                 _deployStrategy(string.concat("Aave V4 Isolated ", vm.toString(i)), new address[](0));
 
             vm.prank(adminAddr);
@@ -263,7 +263,7 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
         _depositIntoStrategy(allocationAmount);
 
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotKeeper.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotKeeper.selector);
         strategy.allocate(spoke, allocationAmount);
     }
 
@@ -276,7 +276,7 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
         strategy.allocate(spoke, allocationAmount);
 
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultHasActivePosition.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultHasActivePosition.selector);
         strategy.removeSubVault(spoke);
     }
 
@@ -323,7 +323,7 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
         strategy.freezeSubVaultDeposits(spoke);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.DepositsFrozen.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.DepositsFrozen.selector);
         strategy.allocate(spoke, allocationAmount);
 
         vm.prank(adminAddr);
@@ -352,7 +352,7 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
         assertEq(IERC20(USDC).allowance(address(strategy), spoke), 0);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(ERC4626MultiStrategy.SubVaultNotApproved.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.SubVaultNotApproved.selector);
         strategy.allocate(spoke, 1);
     }
 
@@ -371,13 +371,13 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
         assertEq(strategy.pendingAdmin(), address(0));
 
         vm.prank(adminAddr);
-        vm.expectRevert(ERC4626MultiStrategy.NotAdmin.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotAdmin.selector);
         strategy.setKeeper(randomUser);
     }
 
     function test_constructor_acceptsLiveInitialAaveV4SubVaults() public {
         address[] memory initialSubVaults = _configuredSpokes();
-        ERC4626MultiStrategy seededStrategy = _deployStrategy("Aave V4 Seeded", initialSubVaults);
+        ERC4626MultiStrategyV1_2 seededStrategy = _deployStrategy("Aave V4 Seeded", initialSubVaults);
 
         for (uint256 i = 0; i < initialSubVaults.length; i++) {
             assertTrue(seededStrategy.isApproved(initialSubVaults[i]));
@@ -387,19 +387,19 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
 
     function test_sweepReward_revertsIfNotVault() public {
         vm.prank(randomUser);
-        vm.expectRevert(ERC4626MultiStrategy.NotVault.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NotVault.selector);
         strategy.sweepReward(address(0x1), vaultAddr);
     }
 
     function test_sweepReward_revertsOnAsset() public {
         vm.prank(vaultAddr);
-        vm.expectRevert(ERC4626MultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(USDC, vaultAddr);
     }
 
     function test_sweepReward_revertsOnApprovedSubVaultShare() public {
         vm.prank(vaultAddr);
-        vm.expectRevert(ERC4626MultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(AAVE_V4_CORE_USDC, vaultAddr);
     }
 
@@ -412,9 +412,9 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
         address[] memory initialSubVaults
     )
         internal
-        returns (ERC4626MultiStrategy targetStrategy)
+        returns (ERC4626MultiStrategyV1_2 targetStrategy)
     {
-        targetStrategy = new ERC4626MultiStrategy(USDC, vaultAddr, adminAddr, strategyName, 64, initialSubVaults);
+        targetStrategy = new ERC4626MultiStrategyV1_2(USDC, vaultAddr, adminAddr, strategyName, 64, initialSubVaults);
 
         vm.prank(adminAddr);
         targetStrategy.setKeeper(keeperAddr);
@@ -427,14 +427,14 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
         _depositIntoStrategy(strategy, amount);
     }
 
-    function _depositIntoStrategy(ERC4626MultiStrategy targetStrategy, uint256 amount) internal {
+    function _depositIntoStrategy(ERC4626MultiStrategyV1_2 targetStrategy, uint256 amount) internal {
         deal(USDC, vaultAddr, amount);
         vm.prank(vaultAddr);
         targetStrategy.deposit(amount);
     }
 
     function _plannedAllocations(
-        ERC4626MultiStrategy targetStrategy,
+        ERC4626MultiStrategyV1_2 targetStrategy,
         uint256 preferredPerSpoke
     )
         internal
@@ -458,7 +458,7 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
     }
 
     function _firstAllocatableSpoke(
-        ERC4626MultiStrategy targetStrategy,
+        ERC4626MultiStrategyV1_2 targetStrategy,
         uint256 preferredAmount
     )
         internal
@@ -481,7 +481,7 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
     }
 
     function _allocatePlan(
-        ERC4626MultiStrategy targetStrategy,
+        ERC4626MultiStrategyV1_2 targetStrategy,
         address[] memory spokes,
         uint256[] memory amounts
     )
@@ -496,7 +496,7 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
     }
 
     function _sumDirectVaultAssets(
-        ERC4626MultiStrategy targetStrategy,
+        ERC4626MultiStrategyV1_2 targetStrategy,
         address[] memory spokes
     )
         internal
@@ -509,7 +509,7 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
     }
 
     function _directVaultAssets(
-        ERC4626MultiStrategy targetStrategy,
+        ERC4626MultiStrategyV1_2 targetStrategy,
         address subVault
     )
         internal
@@ -528,7 +528,7 @@ contract AaveV4ERC4626MultiStrategyForkTest is Test {
         spokes[2] = AAVE_V4_PRIME_USDC;
     }
 
-    function _addSubVaults(ERC4626MultiStrategy targetStrategy, address[] memory spokes) internal {
+    function _addSubVaults(ERC4626MultiStrategyV1_2 targetStrategy, address[] memory spokes) internal {
         for (uint256 i = 0; i < spokes.length; i++) {
             targetStrategy.addSubVault(spokes[i]);
         }

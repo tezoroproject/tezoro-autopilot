@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 /// @title IRewardsController
 /// @notice Minimal interface for Aave V3 / Spark incentives controller.
-///         Used by AaveV3Strategy to claim reward tokens (ARB, OP, etc.).
+///         Used by AaveV3StrategyV1_2 to claim reward tokens (ARB, OP, etc.).
 interface IRewardsController {
     /// @notice Claims all accrued rewards for the given assets and sends to `to`.
     /// @param assets Array of aToken/spToken addresses to claim rewards for

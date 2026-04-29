@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 /// @title ICometRewards
 /// @notice Minimal interface for Compound V3 CometRewards contract.
-///         Used by CompoundV3Strategy to claim COMP rewards.
+///         Used by CompoundV3StrategyV1_2 to claim COMP rewards.
 interface ICometRewards {
     /// @notice Claim accrued COMP rewards for a supplier.
     /// @param comet The Comet (market) contract address

@@ -3,11 +3,11 @@ pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TezoroV1_1} from "../../src/TezoroV1_1.sol";
+import {TezoroV1_2} from "../../src/TezoroV1_2.sol";
 import {IStrategy} from "../../src/interfaces/IStrategy.sol";
-import {RewardsModule} from "../../src/RewardsModule.sol";
-import {CompoundV3Strategy} from "../../src/strategies/CompoundV3Strategy.sol";
-import {MorphoBlueMultiStrategy} from "../../src/strategies/MorphoBlueMultiStrategy.sol";
+import {RewardsModuleV1_2} from "../../src/RewardsModuleV1_2.sol";
+import {CompoundV3StrategyV1_2} from "../../src/strategies/CompoundV3StrategyV1_2.sol";
+import {MorphoBlueMultiStrategyV1_2} from "../../src/strategies/MorphoBlueMultiStrategyV1_2.sol";
 import {IMorpho, MarketParams, Id} from "../../src/interfaces/IMorpho.sol";
 import {BaseChainForkTest} from "./shared/BaseChainForkTest.sol";
 
@@ -310,46 +310,46 @@ contract SecurityTests is BaseChainForkTest {
     function test_security_accessControl_adminFunctions() public {
         vm.startPrank(alice);
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.addStrategy(IStrategy(address(0x1)));
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.removeStrategy(IStrategy(address(0x1)));
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setMaxAllocation(IStrategy(address(0x1)), 1000);
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.transferAdmin(alice);
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setKeeper(alice);
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setIdleBuffer(500);
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setMaxDeviation(100);
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setRewardsModule(alice);
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setPerformanceFee(2000);
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setFeeRecipient(alice);
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setDepositCap(1);
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setGuardian(alice);
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.unpauseVault();
 
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setTimelockDelay(1 days);
 
         vm.stopPrank();
@@ -359,16 +359,16 @@ contract SecurityTests is BaseChainForkTest {
     function test_security_accessControl_keeperFunctions() public {
         vm.startPrank(alice);
 
-        vm.expectRevert(TezoroV1_1.NotAdminOrKeeper.selector);
+        vm.expectRevert(TezoroV1_2.NotAdminOrKeeper.selector);
         vault.rebalance();
 
-        vm.expectRevert(TezoroV1_1.NotAdminOrKeeper.selector);
+        vm.expectRevert(TezoroV1_2.NotAdminOrKeeper.selector);
         vault.reconcile();
 
-        vm.expectRevert(TezoroV1_1.NotAdminOrKeeper.selector);
+        vm.expectRevert(TezoroV1_2.NotAdminOrKeeper.selector);
         vault.harvestAll();
 
-        vm.expectRevert(TezoroV1_1.NotAdminOrKeeper.selector);
+        vm.expectRevert(TezoroV1_2.NotAdminOrKeeper.selector);
         vault.collectFees();
 
         vm.stopPrank();
@@ -380,15 +380,15 @@ contract SecurityTests is BaseChainForkTest {
         vault.setRewardsModule(makeAddr("rm"));
 
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotRewardsModule.selector);
+        vm.expectRevert(TezoroV1_2.NotRewardsModule.selector);
         vault.depositRewards(1);
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.NotRewardsModule.selector);
+        vm.expectRevert(TezoroV1_2.NotRewardsModule.selector);
         vault.depositRewards(1);
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotRewardsModule.selector);
+        vm.expectRevert(TezoroV1_2.NotRewardsModule.selector);
         vault.depositRewards(1);
     }
 
@@ -401,7 +401,7 @@ contract SecurityTests is BaseChainForkTest {
         if (address(aaveStrategy) == address(0)) return;
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyAlreadyActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyAlreadyActive.selector);
         vault.addStrategy(IStrategy(address(aaveStrategy)));
     }
 
@@ -410,7 +410,7 @@ contract SecurityTests is BaseChainForkTest {
         MockWrongAssetStrategy wrongStrategy = new MockWrongAssetStrategy(SEC_ETH_WETH);
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyAssetMismatch.selector);
+        vm.expectRevert(TezoroV1_2.StrategyAssetMismatch.selector);
         vault.addStrategy(IStrategy(address(wrongStrategy)));
     }
 
@@ -521,17 +521,17 @@ contract SecurityTests is BaseChainForkTest {
 
         // Deposits blocked
         vm.prank(bob);
-        vm.expectRevert(TezoroV1_1.VaultIsPaused.selector);
+        vm.expectRevert(TezoroV1_2.VaultIsPaused.selector);
         vault.deposit(1, bob);
 
         // Mint blocked
         vm.prank(bob);
-        vm.expectRevert(TezoroV1_1.VaultIsPaused.selector);
+        vm.expectRevert(TezoroV1_2.VaultIsPaused.selector);
         vault.mint(1, bob);
 
         // Rebalance blocked
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.VaultIsPaused.selector);
+        vm.expectRevert(TezoroV1_2.VaultIsPaused.selector);
         vault.rebalance();
 
         // Withdrawal works
@@ -635,26 +635,26 @@ contract SecurityTests is BaseChainForkTest {
 
     /// @notice Verify constructor rejects invalid parameters
     function test_security_constructor_validation() public {
-        vm.expectRevert(TezoroV1_1.ZeroAddress.selector);
-        new TezoroV1_1(IERC20(token), "Test", "TST", address(0), feeRecipient, 1500, 300);
+        vm.expectRevert(TezoroV1_2.ZeroAddress.selector);
+        new TezoroV1_2(IERC20(token), "Test", "TST", address(0), feeRecipient, 1500, 300);
 
-        vm.expectRevert(TezoroV1_1.ZeroAddress.selector);
-        new TezoroV1_1(IERC20(token), "Test", "TST", admin, address(0), 1500, 300);
+        vm.expectRevert(TezoroV1_2.ZeroAddress.selector);
+        new TezoroV1_2(IERC20(token), "Test", "TST", admin, address(0), 1500, 300);
 
-        vm.expectRevert(TezoroV1_1.InvalidFee.selector);
-        new TezoroV1_1(IERC20(token), "Test", "TST", admin, feeRecipient, 5000, 300);
+        vm.expectRevert(TezoroV1_2.InvalidFee.selector);
+        new TezoroV1_2(IERC20(token), "Test", "TST", admin, feeRecipient, 5000, 300);
 
-        vm.expectRevert(TezoroV1_1.InvalidBuffer.selector);
-        new TezoroV1_1(IERC20(token), "Test", "TST", admin, feeRecipient, 1500, 5000);
+        vm.expectRevert(TezoroV1_2.InvalidBuffer.selector);
+        new TezoroV1_2(IERC20(token), "Test", "TST", admin, feeRecipient, 1500, 5000);
     }
 
     // =========================================================================
-    // RewardsModule Security
+    // RewardsModuleV1_2 Security
     // =========================================================================
 
-    /// @notice RewardsModule: swap cannot use base asset as input
+    /// @notice RewardsModuleV1_2: swap cannot use base asset as input
     function test_security_rm_cannotSwapBaseAsset() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         rm.setKeeper(keeper);
@@ -663,23 +663,23 @@ contract SecurityTests is BaseChainForkTest {
         vm.stopPrank();
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.CannotSwapBaseAsset.selector);
+        vm.expectRevert(RewardsModuleV1_2.CannotSwapBaseAsset.selector);
         rm.swap(router, token, token, 100, 0, hex"");
     }
 
-    /// @notice RewardsModule: cannot rescue base asset
+    /// @notice RewardsModuleV1_2: cannot rescue base asset
     function test_security_rm_cannotRescueBaseAsset() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
         deal(token, address(rm), 100e6);
 
         vm.prank(admin);
-        vm.expectRevert(RewardsModule.CannotRescueBaseAsset.selector);
+        vm.expectRevert(RewardsModuleV1_2.CannotRescueBaseAsset.selector);
         rm.rescueToken(token, admin, 100e6);
     }
 
-    /// @notice RewardsModule: sweepToVault properly sends to vault
+    /// @notice RewardsModuleV1_2: sweepToVault properly sends to vault
     function test_security_rm_sweepToVault_goesToVault() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
         vm.startPrank(admin);
         vault.setRewardsModule(address(rm));
@@ -709,8 +709,8 @@ contract SecurityTests is BaseChainForkTest {
     function test_security_strategies_onlyVault() public {
         address attacker = makeAddr("attacker");
 
-        // All strategies define the same NotVault() error; use CompoundV3Strategy's selector as canonical reference
-        bytes4 notVault = CompoundV3Strategy.NotVault.selector;
+        // All strategies define the same NotVault() error; use CompoundV3StrategyV1_2's selector as canonical reference
+        bytes4 notVault = CompoundV3StrategyV1_2.NotVault.selector;
 
         if (address(aaveStrategy) != address(0)) {
             vm.prank(attacker);
@@ -839,7 +839,7 @@ contract SecurityTests is BaseChainForkTest {
         bps[0] = 10_001;
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.InvalidAllocation.selector);
+        vm.expectRevert(TezoroV1_2.InvalidAllocation.selector);
         vault.rebalance(strats, bps);
     }
 
@@ -851,7 +851,7 @@ contract SecurityTests is BaseChainForkTest {
         bps[0] = 1000;
 
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.StrategyNotActive.selector);
+        vm.expectRevert(TezoroV1_2.StrategyNotActive.selector);
         vault.rebalance(strats, bps);
     }
 
@@ -881,7 +881,7 @@ contract SecurityTests is BaseChainForkTest {
         assertFalse(vault.isTimelockReady(opHash));
 
         // Cancel non-existent
-        vm.expectRevert(TezoroV1_1.TimelockNotFound.selector);
+        vm.expectRevert(TezoroV1_2.TimelockNotFound.selector);
         vault.cancelTimelock(keccak256("nonexistent"));
 
         vm.stopPrank();
@@ -947,15 +947,15 @@ contract SecurityTests is BaseChainForkTest {
     }
 
     // =========================================================================
-    // M-1 Fix: CompoundV3Strategy.sweepReward Comet Check
+    // M-1 Fix: CompoundV3StrategyV1_2.sweepReward Comet Check
     // =========================================================================
 
-    /// @notice CompoundV3Strategy.sweepReward should reject sweeping the Comet token
+    /// @notice CompoundV3StrategyV1_2.sweepReward should reject sweeping the Comet token
     function test_security_compound_sweepReward_rejects_comet() public {
         if (address(compoundStrategy) == address(0)) return;
 
         vm.prank(address(vault));
-        vm.expectRevert(CompoundV3Strategy.CannotSweepAsset.selector);
+        vm.expectRevert(CompoundV3StrategyV1_2.CannotSweepAsset.selector);
         compoundStrategy.sweepReward(compoundComet, makeAddr("recipient"));
     }
 
@@ -1171,12 +1171,12 @@ contract SecurityTests is BaseChainForkTest {
     }
 
     // =========================================================================
-    // Additional: RewardsModule executeClaim cannot steal funds
+    // Additional: RewardsModuleV1_2 executeClaim cannot steal funds
     // =========================================================================
 
     /// @notice executeClaim: even with whitelisted selector, cannot call arbitrary target
     function test_security_rm_executeClaim_targetIsolation() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
         vm.prank(admin);
         rm.setKeeper(keeper);
 
@@ -1192,13 +1192,13 @@ contract SecurityTests is BaseChainForkTest {
         bytes memory data = abi.encodeWithSelector(claimSel, address(0), address(0), true);
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.TargetNotWhitelisted.selector);
+        vm.expectRevert(RewardsModuleV1_2.TargetNotWhitelisted.selector);
         rm.executeClaim(differentTarget, data);
     }
 
     /// @notice swap() cannot be used to drain base asset (CannotSwapBaseAsset)
     function test_security_rm_swap_cannotDrainBaseAsset() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
         address router = address(0x789);
 
         vm.startPrank(admin);
@@ -1208,7 +1208,7 @@ contract SecurityTests is BaseChainForkTest {
 
         // Try to swap base asset — should revert
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.CannotSwapBaseAsset.selector);
+        vm.expectRevert(RewardsModuleV1_2.CannotSwapBaseAsset.selector);
         rm.swap(router, token, token, 100e6, 0, hex"");
     }
 
@@ -1411,7 +1411,7 @@ contract SecurityTests is BaseChainForkTest {
 
         // Guardian CANNOT unpause
         vm.prank(guardian);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.unpauseVault();
 
         // Only admin can unpause
@@ -1458,7 +1458,7 @@ contract SecurityTests is BaseChainForkTest {
     /// @notice transferAdmin to zero address reverts
     function test_security_transferAdmin_zeroAddress() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.ZeroAddress.selector);
+        vm.expectRevert(TezoroV1_2.ZeroAddress.selector);
         vault.transferAdmin(address(0));
     }
 
@@ -1478,7 +1478,7 @@ contract SecurityTests is BaseChainForkTest {
 
         // Old admin should be locked out
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.setKeeper(alice);
 
         // New admin works
@@ -1505,20 +1505,20 @@ contract SecurityTests is BaseChainForkTest {
     }
 
     // =========================================================================
-    // MorphoBlueMultiStrategy loanToken validation
+    // MorphoBlueMultiStrategyV1_2 loanToken validation
     // =========================================================================
 
     /// @notice addMarket rejects mismatched loanToken
     function test_security_morpho_loanTokenMismatch() public {
         if (morpho == address(0)) return;
 
-        MorphoBlueMultiStrategy multi = new MorphoBlueMultiStrategy(token, morpho, address(vault), admin, "Test", 64, new MarketParams[](0));
+        MorphoBlueMultiStrategyV1_2 multi = new MorphoBlueMultiStrategyV1_2(token, morpho, address(vault), admin, "Test", 64, new MarketParams[](0));
 
         MarketParams memory mp = IMorpho(morpho).idToMarketParams(Id.wrap(morphoMarketId));
         mp.loanToken = address(0xdead); // tamper with loanToken
 
         vm.prank(admin);
-        vm.expectRevert(MorphoBlueMultiStrategy.LoanTokenMismatch.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.LoanTokenMismatch.selector);
         multi.addMarket(mp);
     }
 
@@ -1526,7 +1526,7 @@ contract SecurityTests is BaseChainForkTest {
     function test_security_morpho_loanTokenMatch() public {
         if (morpho == address(0)) return;
 
-        MorphoBlueMultiStrategy multi = new MorphoBlueMultiStrategy(token, morpho, address(vault), admin, "Test", 64, new MarketParams[](0));
+        MorphoBlueMultiStrategyV1_2 multi = new MorphoBlueMultiStrategyV1_2(token, morpho, address(vault), admin, "Test", 64, new MarketParams[](0));
 
         MarketParams memory mp = IMorpho(morpho).idToMarketParams(Id.wrap(morphoMarketId));
         // Should not revert
@@ -1541,7 +1541,7 @@ contract SecurityTests is BaseChainForkTest {
     /// @notice Rejects values > BPS, accepts 0 and BPS
     function test_security_setMaxDeviation_bounds() public {
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.InvalidAllocation.selector);
+        vm.expectRevert(TezoroV1_2.InvalidAllocation.selector);
         vault.setMaxDeviation(10_001);
 
         // Exactly BPS should succeed
@@ -1556,12 +1556,12 @@ contract SecurityTests is BaseChainForkTest {
     }
 
     // =========================================================================
-    // RewardsModule SwapCallFailed
+    // RewardsModuleV1_2 SwapCallFailed
     // =========================================================================
 
     /// @notice swap() reverts with SwapCallFailed when router call fails
     function test_security_rm_swapCallFailed_customError() public {
-        RewardsModule rm = new RewardsModule(address(vault), admin);
+        RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
         address router = address(0x789);
 
         vm.startPrank(admin);
@@ -1578,7 +1578,7 @@ contract SecurityTests is BaseChainForkTest {
         vm.etch(router, hex"60006000FD"); // PUSH1 0, PUSH1 0, REVERT
 
         vm.prank(keeper);
-        vm.expectRevert(RewardsModule.SwapCallFailed.selector);
+        vm.expectRevert(RewardsModuleV1_2.SwapCallFailed.selector);
         rm.swap(router, compRewardToken, token, 1e18, 0, hex"");
     }
 
@@ -1664,7 +1664,7 @@ contract SecurityTests is BaseChainForkTest {
             bpsArr[i] = 5_000;
         }
         vm.prank(admin);
-        vm.expectRevert(TezoroV1_1.InvalidAllocation.selector);
+        vm.expectRevert(TezoroV1_2.InvalidAllocation.selector);
         vault.rebalance(strats, bpsArr);
     }
 
@@ -1784,11 +1784,11 @@ contract SecurityTests is BaseChainForkTest {
         vault.deposit(depositAmount, alice);
 
         vm.prank(keeper);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.forceRedeem(alice);
 
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.forceRedeem(alice);
     }
 
@@ -1807,7 +1807,7 @@ contract SecurityTests is BaseChainForkTest {
 
         // Guardian CANNOT unfreeze
         vm.prank(guardian_);
-        vm.expectRevert(TezoroV1_1.NotAdmin.selector);
+        vm.expectRevert(TezoroV1_2.NotAdmin.selector);
         vault.unfreezeStrategyDeposits(IStrategy(address(aaveStrategy)));
 
         // Admin can unfreeze

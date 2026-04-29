@@ -4,16 +4,16 @@ pragma solidity ^0.8.28;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {ITezoroV1_1} from "./interfaces/ITezoroV1_1.sol";
+import {ITezoroVault} from "./interfaces/ITezoroVault.sol";
 
-/// @title RewardsModule
+/// @title RewardsModuleV1_2
 /// @notice Manages reward token claims, swaps, and auto-compounding into the vault.
 ///         Receives reward tokens from strategies during harvest. Claims merkle-based
 ///         rewards via whitelisted executeClaim. Swaps to base asset via whitelisted
 ///         DEX routers. Sweeps base asset back to vault via depositRewards().
 /// @dev Security boundary: can ONLY send base asset to the vault. Even if fully
 ///      compromised, user deposits are safe -- only reward tokens at risk.
-contract RewardsModule is ReentrancyGuard {
+contract RewardsModuleV1_2 is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // --- Immutables ---
@@ -90,7 +90,7 @@ contract RewardsModule is ReentrancyGuard {
     constructor(address vault_, address admin_) {
         if (vault_ == address(0) || admin_ == address(0)) revert ZeroAddress();
         vault = vault_;
-        baseAsset = ITezoroV1_1(vault_).asset();
+        baseAsset = ITezoroVault(vault_).asset();
         admin = admin_;
     }
 
@@ -178,7 +178,7 @@ contract RewardsModule is ReentrancyGuard {
         if (balance == 0) revert NothingToSweep();
 
         IERC20(baseAsset).forceApprove(vault, balance);
-        ITezoroV1_1(vault).depositRewards(balance);
+        ITezoroVault(vault).depositRewards(balance);
 
         emit SweptToVault(balance);
     }

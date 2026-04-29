@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {MorphoBlueMultiStrategy} from "../../src/strategies/MorphoBlueMultiStrategy.sol";
+import {MorphoBlueMultiStrategyV1_2} from "../../src/strategies/MorphoBlueMultiStrategyV1_2.sol";
 import {IMorpho, MarketParams, Id} from "../../src/interfaces/IMorpho.sol";
 
 // Real Ethereum mainnet addresses
@@ -15,11 +15,11 @@ address constant MORPHO = 0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb;
 bytes32 constant USDC_WSTETH_MARKET = 0xb323495f7e4148be5643a4ea4a8221eef163e4bccfdedc2a6f4696baacbc86cc;
 bytes32 constant USDC_WBTC_MARKET = 0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49;
 
-/// @notice Fork test for MorphoBlueMultiStrategy against real Morpho Blue markets on Ethereum mainnet.
+/// @notice Fork test for MorphoBlueMultiStrategyV1_2 against real Morpho Blue markets on Ethereum mainnet.
 contract MorphoBlueMultiStrategyForkTest is Test {
     using SafeERC20 for IERC20;
 
-    MorphoBlueMultiStrategy strategy;
+    MorphoBlueMultiStrategyV1_2 strategy;
     IMorpho morpho = IMorpho(MORPHO);
 
     MarketParams mpWstETH;
@@ -43,7 +43,7 @@ contract MorphoBlueMultiStrategyForkTest is Test {
         midWstETH = Id.wrap(USDC_WSTETH_MARKET);
         midWBTC = Id.wrap(USDC_WBTC_MARKET);
 
-        strategy = new MorphoBlueMultiStrategy(USDC, MORPHO, vaultAddr, adminAddr, "Morpho Blue USDC", 64, new MarketParams[](0));
+        strategy = new MorphoBlueMultiStrategyV1_2(USDC, MORPHO, vaultAddr, adminAddr, "Morpho Blue USDC", 64, new MarketParams[](0));
 
         vm.startPrank(adminAddr);
         strategy.setKeeper(keeperAddr);
@@ -220,13 +220,13 @@ contract MorphoBlueMultiStrategyForkTest is Test {
             Id.wrap(0xa921ef34e2fc7a27ccc50ae7e4b154e16c9799d3387076c421423ef52ac4df99) // USDT/WBTC
         );
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.LoanTokenMismatch.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.LoanTokenMismatch.selector);
         strategy.addMarket(mp);
     }
 
     function test_addMarket_revertsIfAlreadyApproved() public {
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.MarketAlreadyApproved.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.MarketAlreadyApproved.selector);
         strategy.addMarket(mpWstETH);
     }
 
@@ -238,13 +238,13 @@ contract MorphoBlueMultiStrategyForkTest is Test {
         strategy.deposit(DEPOSIT_AMOUNT);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.MarketNotApproved.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.MarketNotApproved.selector);
         strategy.allocate(midWstETH, 50_000e6);
     }
 
     function test_allocate_revertsIfNotKeeper() public {
         vm.prank(randomUser);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotKeeper.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotKeeper.selector);
         strategy.allocate(midWstETH, 100e6);
     }
 
@@ -253,7 +253,7 @@ contract MorphoBlueMultiStrategyForkTest is Test {
         strategy.deposit(100e6);
 
         vm.prank(keeperAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.InsufficientIdle.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.InsufficientIdle.selector);
         strategy.allocate(midWstETH, 200e6);
     }
 
@@ -365,7 +365,7 @@ contract MorphoBlueMultiStrategyForkTest is Test {
 
         // Old admin can no longer act
         vm.prank(adminAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.NotAdmin.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.NotAdmin.selector);
         strategy.transferAdmin(adminAddr);
 
         // New admin can act
@@ -400,7 +400,7 @@ contract MorphoBlueMultiStrategyForkTest is Test {
 
     function test_sweepReward_revertsOnUSDC() public {
         vm.prank(vaultAddr);
-        vm.expectRevert(MorphoBlueMultiStrategy.CannotSweepAsset.selector);
+        vm.expectRevert(MorphoBlueMultiStrategyV1_2.CannotSweepAsset.selector);
         strategy.sweepReward(USDC, adminAddr);
     }
 
