@@ -403,20 +403,64 @@ contract ERC4626MultiStrategyTest is Test {
         assertGe(strategy.availableLiquidity(), 999e6);
     }
 
-    function test_isHealthy_falseWhenNoSubVaultActivity() public view {
-        // Sub-vaults have no deposits from anyone
-        assertFalse(strategy.isHealthy());
+    // =========================================================================
+    // Audit fix #31 (Oak 2026-04-24): isHealthy is strategy-level, not
+    //                                 global-vault-non-emptiness
+    // =========================================================================
+
+    /// @notice An empty but approved + depositable sub-vault is healthy.
+    ///         Pre-fix the predicate was `IERC4626(sv).totalAssets() > 0`
+    ///         (global vault assets across ALL depositors) — fresh markets
+    ///         reported unhealthy and never received their initial
+    ///         allocation.
+    function test_auditFix31_isHealthyTrueOnEmptyButDepositableSubVault() public view {
+        // Default fixture: subVaultA / subVaultB approved, neither frozen,
+        // no allocations yet, maxDeposit defaults to type(uint).max.
+        assertTrue(
+            strategy.isHealthy(),
+            "fresh-but-depositable sub-vault must report healthy"
+        );
     }
 
-    function test_isHealthy_trueWhenSubVaultHasAssets() public {
-        _fundVaultAndApprove(100e6);
-        vm.prank(vaultAddr);
-        strategy.deposit(100e6);
+    /// @notice Strategy reports unhealthy when every approved sub-vault is
+    ///         deposit-frozen.
+    function test_auditFix31_isHealthyFalseWhenAllSubVaultsFrozen() public {
+        vm.startPrank(adminAddr);
+        strategy.freezeSubVaultDeposits(address(subVaultA));
+        strategy.freezeSubVaultDeposits(address(subVaultB));
+        vm.stopPrank();
 
-        vm.prank(keeperAddr);
-        strategy.allocate(address(subVaultA), 100e6);
+        assertFalse(
+            strategy.isHealthy(),
+            "all-frozen sub-vault set must report unhealthy"
+        );
+    }
 
-        assertTrue(strategy.isHealthy());
+    /// @notice At least one healthy sub-vault keeps the strategy healthy
+    ///         even when others are frozen — predicate is "ANY healthy",
+    ///         not "ALL healthy".
+    function test_auditFix31_isHealthyTrueWhenAtLeastOneSubVaultHealthy() public {
+        vm.prank(adminAddr);
+        strategy.freezeSubVaultDeposits(address(subVaultA));
+        // subVaultB stays healthy.
+        assertTrue(strategy.isHealthy(), "B keeps the strategy healthy");
+    }
+
+    /// @notice Broken children are isolated by try/catch — they can't brick
+    ///         the aggregate. Mirrors audit-fix(14) on balanceOf /
+    ///         availableLiquidity.
+    function test_auditFix31_isHealthySurvivesBrokenSubVault() public {
+        RevertingVault4626 brokenVault = new RevertingVault4626(IERC20(address(token)));
+        vm.prank(adminAddr);
+        strategy.addSubVault(address(brokenVault));
+
+        brokenVault.setBroken(true);
+
+        // The two healthy children keep the strategy healthy.
+        assertTrue(
+            strategy.isHealthy(),
+            "broken sub-vault must not poison the aggregate"
+        );
     }
 
     // ========== sweepReward ==========
@@ -900,6 +944,11 @@ contract RevertingVault4626 is ERC4626 {
     function convertToAssets(uint256 shares) public view override returns (uint256) {
         if (broken) revert("broken");
         return super.convertToAssets(shares);
+    }
+
+    function maxDeposit(address receiver) public view override returns (uint256) {
+        if (broken) revert("broken");
+        return super.maxDeposit(receiver);
     }
 }
 

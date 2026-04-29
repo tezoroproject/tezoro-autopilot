@@ -239,9 +239,26 @@ contract ERC4626MultiStrategyV1_2 is IStrategy, ReentrancyGuard {
     }
 
     function isHealthy() external view override returns (bool) {
+        // Strategy-level health: at least one approved sub-vault that is
+        // (a) not deposit-frozen on the wrapper and
+        // (b) presently accepts new deposits (maxDeposit > 0).
+        // Pre-fix the predicate was `IERC4626(sv).totalAssets() > 0` —
+        // global vault non-emptiness, which is unrelated to whether THIS
+        // strategy's allocations would be safe. Any other LP holding shares
+        // kept the signal positive even when the sub-vault was paused,
+        // capacity-exhausted, or operationally retired.
+        // Each maxDeposit read is wrapped in try/catch so a single broken
+        // child cannot brick the aggregate (same isolation principle as
+        // balanceOf/availableLiquidity post audit-fix(14)).
         uint256 len = _subVaults.length;
         for (uint256 i = 0; i < len; i++) {
-            if (IERC4626(_subVaults[i]).totalAssets() > 0) return true;
+            address sv = _subVaults[i];
+            if (depositFrozenSubVaults[sv]) continue;
+            try IERC4626(sv).maxDeposit(address(this)) returns (uint256 maxD) {
+                if (maxD > 0) return true;
+            } catch {
+                // broken child — skip
+            }
         }
         return false;
     }
