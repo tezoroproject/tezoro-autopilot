@@ -2777,4 +2777,60 @@ contract TezoroV1_2Test is Test {
             "fee shares must mint at old rate when raising fee on stale NAV"
         );
     }
+
+    // =========================================================================
+    // Audit fix #15 (Oak 2026-04-24): refuse RewardsModule rotation while the
+    //                                 outgoing module still holds base asset
+    // =========================================================================
+
+    /// @notice Pre-fix, an admin could swap out a RewardsModule that still
+    ///         held base-asset rewards. The leftover stranded — sweepToVault
+    ///         on the old module reverts (msg.sender no longer matches the
+    ///         registered rewardsModule) and rescueToken refuses the base
+    ///         asset. Post-fix, setRewardsModule reverts.
+    function test_auditFix15_rotationBlockedWhileOldModuleHoldsAsset() public {
+        address rmOld = makeAddr("rmOld");
+        vm.prank(admin);
+        vault.setRewardsModule(rmOld);
+
+        // Park base asset in the outgoing module (post-swap, pre-sweep state).
+        token.mint(rmOld, 1);
+
+        address rmNew = makeAddr("rmNew");
+        vm.prank(admin);
+        vm.expectRevert(TezoroV1_2.RewardsModuleNotEmpty.selector);
+        vault.setRewardsModule(rmNew);
+    }
+
+    /// @notice Setting from address(0) -> module is unaffected (no leftover
+    ///         to strand).
+    function test_auditFix15_initialSetNotBlockedWhenVaultIdleHasAsset() public {
+        // Donate base asset directly to the vault (idle). Setting the FIRST
+        // RewardsModule must still succeed because the gate is on the OLD
+        // module's balance, not the vault's.
+        token.mint(address(vault), 100e6);
+
+        address rmNew = makeAddr("rmNew");
+        vm.prank(admin);
+        vault.setRewardsModule(rmNew);
+        assertEq(vault.rewardsModule(), rmNew);
+    }
+
+    /// @notice Rotation succeeds when outgoing module has been drained.
+    function test_auditFix15_rotationWorksAfterDrain() public {
+        address rmOld = makeAddr("rmOld");
+        vm.prank(admin);
+        vault.setRewardsModule(rmOld);
+
+        token.mint(rmOld, 100e6);
+        // Pretend the operator drained the leftover (e.g. via depositRewards
+        // or rescueToken on the module side).
+        vm.prank(rmOld);
+        token.transfer(address(0xdead), 100e6);
+
+        address rmNew = makeAddr("rmNew");
+        vm.prank(admin);
+        vault.setRewardsModule(rmNew);
+        assertEq(vault.rewardsModule(), rmNew);
+    }
 }
