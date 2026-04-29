@@ -58,7 +58,17 @@ contract FluidStrategyV1_2 is IStrategy {
         uint256 shares = fToken.balanceOf(address(this));
         if (shares == 0) return 0;
 
-        // Redeem all shares, send assets to vault
+        // Cap to current Fluid Liquidity-layer capacity. Pre-fix the call
+        // redeemed the full share balance unconditionally, so a temporary
+        // withdrawal cap (Liquidity utilisation, paused asset) reverted the
+        // entire emergency exit and removeStrategy then misclassified a
+        // recoverable position as fully lost. Post-fix we honour the cap and
+        // recover whatever the protocol can service in this transaction; any
+        // remainder stays in the strategy for a follow-up call.
+        uint256 redeemable = fToken.maxRedeem(address(this));
+        if (redeemable < shares) shares = redeemable;
+        if (shares == 0) return 0;
+
         withdrawn = fToken.redeem(shares, vault, address(this));
     }
 
