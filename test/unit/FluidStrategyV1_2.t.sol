@@ -134,4 +134,28 @@ contract FluidStrategyV1_2Test is Test {
         assertApproxEqAbs(withdrawn, SUPPLY, 2);
         assertEq(fToken.balanceOf(address(strategy)), 0, "position fully drained");
     }
+
+    // =========================================================================
+    // Audit fix #26 (Oak 2026-04-24): constructor validates fToken asset
+    // =========================================================================
+
+    /// @notice Pre-fix the constructor accepted asset_ and fToken_ as
+    ///         independent inputs. Mismatched fToken would deploy cleanly,
+    ///         enter production, and only fail at the first live deposit
+    ///         (atomic revert; no silent loss, but a broken configuration
+    ///         shipped to operations). Post-fix, fail fast at deployment.
+    function test_auditFix26_constructorRevertsOnFTokenAssetMismatch() public {
+        MockUSDC otherAsset = new MockUSDC();
+        MockFToken wrongFToken = new MockFToken(IERC20(address(otherAsset)));
+
+        vm.expectRevert(FluidStrategyV1_2.FluidTokenMismatch.selector);
+        new FluidStrategyV1_2(address(token), address(wrongFToken), vaultAddr);
+    }
+
+    /// @notice Sanity / happy path: a matching fToken passes the new check.
+    function test_auditFix26_constructorAcceptsMatchingFToken() public {
+        // Reuse the existing fToken — its asset() == address(token).
+        FluidStrategyV1_2 ok = new FluidStrategyV1_2(address(token), address(fToken), vaultAddr);
+        assertEq(ok.asset(), address(token));
+    }
 }
