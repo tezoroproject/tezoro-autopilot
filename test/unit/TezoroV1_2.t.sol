@@ -2666,4 +2666,67 @@ contract TezoroV1_2Test is Test {
         assertGt(maxD, 0, "broken strategy must not block cap view");
         assertLe(maxD, cap, "max deposit must not exceed cap");
     }
+
+    // =========================================================================
+    // Audit fix #12 (Oak 2026-04-24): isHealthy gates only the deposit branch
+    // =========================================================================
+
+    /// @notice An unhealthy strategy must still be drained when its target drops.
+    ///         Pre-fix, `if (!healthy) continue;` skipped the whole loop body —
+    ///         including the withdraw branch — so an admin lowering the target
+    ///         on a sick strategy could not actually de-risk; funds stayed
+    ///         stranded. Post-fix, isHealthy gates only the deposit branch.
+    function test_auditFix12_unhealthyStrategyStillWithdrawnByRebalance() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        // Allocate 80% to A.
+        IStrategy[] memory strats = new IStrategy[](1);
+        uint256[] memory bpsList = new uint256[](1);
+        strats[0] = IStrategy(address(strategyA));
+        bpsList[0] = 8_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        uint256 trackedBefore = vault.trackedBalance(IStrategy(address(strategyA)));
+        assertGt(trackedBefore, 0, "precondition: A funded");
+
+        // Health flips to false (e.g. underlying market paused).
+        strategyA.setHealthy(false);
+
+        // Admin drops A's target to 0% to de-risk.
+        bpsList[0] = 0;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        // Post-fix: withdraw branch ran despite !healthy. tracked should be 0.
+        // Pre-fix: tracked unchanged because the whole iteration was skipped.
+        assertEq(
+            vault.trackedBalance(IStrategy(address(strategyA))),
+            0,
+            "unhealthy strategy must still be drained on target=0"
+        );
+    }
+
+    /// @notice Symmetric: rebalance must NOT deposit into an unhealthy strategy.
+    function test_auditFix12_unhealthyStrategyBlocksDeposit() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        strategyA.setHealthy(false);
+
+        IStrategy[] memory strats = new IStrategy[](1);
+        uint256[] memory bpsList = new uint256[](1);
+        strats[0] = IStrategy(address(strategyA));
+        bpsList[0] = 8_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        // No deposit should have happened.
+        assertEq(
+            vault.trackedBalance(IStrategy(address(strategyA))),
+            0,
+            "unhealthy strategy must not receive new capital"
+        );
+    }
 }
