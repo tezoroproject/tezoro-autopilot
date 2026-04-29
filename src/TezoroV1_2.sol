@@ -613,6 +613,23 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     /// @notice Force-redeem all shares of a user, sending assets to the user (not admin).
     ///         When timelockDelay > 0, requires a prior proposeTimelock() with the matching
     ///         operation hash: keccak256(abi.encode("forceRedeem", user)).
+    ///
+    /// @dev forceRedeem is a RECOVERY primitive, not a migration primitive.
+    ///      The receiver is bound to the share-holder address by design — an
+    ///      admin who could redirect a user's redemption to a chosen account
+    ///      could effectively confiscate funds, so the address-binding is
+    ///      intentional theft protection. Two consequences operators must
+    ///      account for:
+    ///        1. A holder can front-run a planned cleanup by transferring
+    ///           shares to a new address; forceRedeem on the original
+    ///           address then reverts NoSharesToRedeem and batchForceRedeem
+    ///           skips the stale entry. Re-issuing the proposal with the
+    ///           new address (or rolling the cleanup) is the operator
+    ///           response.
+    ///        2. If full vault migration ever becomes a hard requirement,
+    ///           it needs a separate primitive (snapshot + admin-chosen
+    ///           escrow / new-vault receiver, gated by timelock and a
+    ///           share-transfer freeze) which is deferred to v1.3.
     function forceRedeem(address user) external onlyAdmin nonReentrant {
         _consumeTimelockIfActive(keccak256(abi.encode("forceRedeem", user)));
         _accruePerformanceFee();
