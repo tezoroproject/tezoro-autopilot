@@ -98,8 +98,30 @@ contract RewardsModuleV1_2 is ReentrancyGuard {
     // Claims Executor
     // =========================================================================
 
-    /// @notice Execute a claim call on a whitelisted target.
-    ///         Used for merkle claims (Morpho URD, Merkl), airdrops, etc.
+    /// @notice Selector for Morpho-style Universal Reward Distributor claims.
+    ///         claim(address account, address reward, uint256 claimable, bytes32[] proof)
+    /// @dev Audit fix #10: typed wrapper claimMorphoUrd binds `account` to
+    ///      address(this) on-chain, so the URD cannot redirect rewards even
+    ///      if its calldata exposed a free recipient field.
+    bytes4 public constant MORPHO_URD_CLAIM_SELECTOR =
+        bytes4(keccak256("claim(address,address,uint256,bytes32[])"));
+
+    /// @notice Selector for Merkl-style distributor claims.
+    ///         claim(address[] users, address[] tokens, uint256[] amounts, bytes32[][] proofs)
+    /// @dev Audit fix #10: typed wrapper claimMerkl binds every entry of
+    ///      `users` to address(this) on-chain.
+    bytes4 public constant MERKL_CLAIM_SELECTOR =
+        bytes4(keccak256("claim(address[],address[],uint256[],bytes32[][])"));
+
+    /// @notice Execute a claim call on a whitelisted target. Used for any
+    ///         claim format that doesn't have a typed wrapper below.
+    /// @dev    TRUST BOUNDARY: this path forwards raw calldata. The whitelist
+    ///         entry (target+selector) does NOT enforce the recipient field,
+    ///         so an admin/keeper relying on this path must add only targets
+    ///         whose payout destination is fixed inside verified proof data
+    ///         (not exposed as a free parameter). For Morpho URD and Merkl
+    ///         flows, prefer claimMorphoUrd / claimMerkl below — they pin
+    ///         the recipient to address(this) on-chain.
     /// @param target The contract to call
     /// @param data The calldata (must match a whitelisted selector)
     function executeClaim(address target, bytes calldata data) external onlyAdminOrKeeper whenNotPaused nonReentrant {
@@ -112,6 +134,64 @@ contract RewardsModuleV1_2 is ReentrancyGuard {
         if (!success) revert ClaimFailed();
 
         emit ClaimExecuted(target, selector);
+    }
+
+    /// @notice Audit fix #10: typed wrapper for Morpho-style URD claims.
+    ///         The `account` parameter (claim recipient) is hardcoded to
+    ///         address(this); the URD cannot route the reward elsewhere even
+    ///         if a future whitelist addition exposed a free recipient field.
+    function claimMorphoUrd(
+        address urd,
+        address rewardToken,
+        uint256 claimable,
+        bytes32[] calldata proof
+    ) external onlyAdminOrKeeper whenNotPaused nonReentrant {
+        if (urd.code.length == 0) revert TargetHasNoCode();
+        if (!claimWhitelist[urd][MORPHO_URD_CLAIM_SELECTOR]) revert TargetNotWhitelisted();
+
+        (bool success,) = urd.call(
+            abi.encodeWithSelector(
+                MORPHO_URD_CLAIM_SELECTOR,
+                address(this),
+                rewardToken,
+                claimable,
+                proof
+            )
+        );
+        if (!success) revert ClaimFailed();
+
+        emit ClaimExecuted(urd, MORPHO_URD_CLAIM_SELECTOR);
+    }
+
+    /// @notice Audit fix #10: typed wrapper for Merkl-style distributor claims.
+    ///         Every entry of `users` is forced to address(this); the
+    ///         distributor cannot route the reward elsewhere.
+    function claimMerkl(
+        address distributor,
+        address[] calldata tokens,
+        uint256[] calldata amounts,
+        bytes32[][] calldata proofs
+    ) external onlyAdminOrKeeper whenNotPaused nonReentrant {
+        if (distributor.code.length == 0) revert TargetHasNoCode();
+        if (!claimWhitelist[distributor][MERKL_CLAIM_SELECTOR]) revert TargetNotWhitelisted();
+
+        address[] memory users = new address[](tokens.length);
+        for (uint256 i = 0; i < tokens.length; i++) {
+            users[i] = address(this);
+        }
+
+        (bool success,) = distributor.call(
+            abi.encodeWithSelector(
+                MERKL_CLAIM_SELECTOR,
+                users,
+                tokens,
+                amounts,
+                proofs
+            )
+        );
+        if (!success) revert ClaimFailed();
+
+        emit ClaimExecuted(distributor, MERKL_CLAIM_SELECTOR);
     }
 
     /// @notice Add or remove a target+selector pair from the claims whitelist
