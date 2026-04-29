@@ -2562,4 +2562,44 @@ contract TezoroV1_2Test is Test {
         vm.expectRevert(TezoroV1_2.ZeroSharesMinted.selector);
         vault.mint(0, alice);
     }
+
+    // =========================================================================
+    // Audit fix #9 (Oak 2026-04-24): waterfall haircut must not socialise
+    //                                across healthy strategies
+    // =========================================================================
+
+    /// @notice When a strategy reports `available` liquidity but actually delivers
+    ///         less, the deficit is a child-vault haircut (e.g. Morpho exit fee),
+    ///         not a normal liquidity shortage. Pre-fix, the loop kept iterating
+    ///         and pulled the missing amount from the next healthy strategy —
+    ///         silently socialising one strategy's exit loss across the whole
+    ///         waterfall. Post-fix, the loop breaks on the first short delivery
+    ///         so the deficit either fits the dust tolerance or surfaces as
+    ///         WithdrawalFailed; remaining strategies are not touched.
+    function test_auditFix9_haircutDoesNotSocialiseAcrossStrategies() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        // 30% to A, 60% to B, 10% idle.
+        IStrategy[] memory strats = new IStrategy[](2);
+        uint256[] memory bpsList = new uint256[](2);
+        strats[0] = IStrategy(address(strategyA));
+        strats[1] = IStrategy(address(strategyB));
+        bpsList[0] = 3_000;
+        bpsList[1] = 6_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        // strategyA short-delivers 5_000 USDC on next withdraw — far above
+        // dust (1 bps of 50k = 5 wei).
+        strategyA.setShortWithdraw(5_000e6);
+
+        // Withdraw 50k. Waterfall pulls 10k idle, asks A for 30k.
+        // Pre-fix: A returns 25k, B is asked for the remaining 15k → succeeds.
+        // Post-fix: A returns 25k, loop breaks → 35k delivered out of 50k →
+        //          gap > dust → WithdrawalFailed.
+        vm.prank(alice);
+        vm.expectRevert(TezoroV1_2.WithdrawalFailed.selector);
+        vault.withdraw(50_000e6, alice, alice);
+    }
 }
