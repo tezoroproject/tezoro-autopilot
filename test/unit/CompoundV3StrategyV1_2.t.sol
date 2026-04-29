@@ -132,6 +132,30 @@ contract CompoundV3StrategyV1_2Test is Test {
     }
 
     // =========================================================================
+    // Audit fix #32 (Oak 2026-04-24): isHealthy requires positive base
+    //                                 liquidity in addition to pause flags
+    // =========================================================================
+
+    /// @notice Pre-fix isHealthy checked pause flags only. A fully-utilised
+    ///         Comet (zero base balance because every deposit was borrowed
+    ///         out) reported healthy and the rebalancer kept routing fresh
+    ///         capital into it; user redeems then surfaced the empty
+    ///         reserve as a withdrawal failure. Post-fix isHealthy demands
+    ///         positive base liquidity in addition to clear pause flags.
+    function test_auditFix32_isHealthyFalseWhenComeBaseLiquidityZero() public {
+        // strategy seeded in setUp; Comet currently holds the supply.
+        assertTrue(strategy.isHealthy(), "precondition: healthy");
+
+        // Drain the Comet's base balance — models a fully-utilised market.
+        deal(address(token), address(comet), 0);
+
+        assertFalse(
+            strategy.isHealthy(),
+            "fully-utilised Comet (zero base) must report unhealthy"
+        );
+    }
+
+    // =========================================================================
     // Audit fix #16 (Oak 2026-04-24): constructor validates Comet baseToken
     // =========================================================================
 
