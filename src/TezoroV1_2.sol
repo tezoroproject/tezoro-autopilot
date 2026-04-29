@@ -256,7 +256,12 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function maxDeposit(address) public view override returns (uint256) {
         if (paused) return 0;
         if (depositCap == 0) return type(uint256).max;
-        uint256 total = totalAssets();
+        // Audit fix #11: use live strategy balances for cap enforcement so a
+        // depositor cannot slip through while trackedBalance is stale (a
+        // window bounded but not eliminated by audit-fix(4)). totalAssets()
+        // is still used for share-pricing; only the cap check sees live
+        // values.
+        uint256 total = _liveTotalAssets();
         if (total >= depositCap) return 0;
         return depositCap - total;
     }
@@ -264,9 +269,30 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function maxMint(address) public view override returns (uint256) {
         if (paused) return 0;
         if (depositCap == 0) return type(uint256).max;
-        uint256 total = totalAssets();
+        uint256 total = _liveTotalAssets();
         if (total >= depositCap) return 0;
         return previewDeposit(depositCap - total);
+    }
+
+    /// @dev Audit fix #11: live aggregation used only for cap enforcement.
+    ///      Falls back to trackedBalance when a strategy's balanceOf reverts
+    ///      (broken strategy) so the cap remains computable. Donation-attack
+    ///      defence is preserved because the share-pricing path still uses
+    ///      cached trackedBalance via totalAssets().
+    function _liveTotalAssets() internal view returns (uint256 total) {
+        total = IERC20(asset()).balanceOf(address(this));
+        if (rewardsModule != address(0)) {
+            total += IERC20(asset()).balanceOf(rewardsModule);
+        }
+        for (uint256 i = 0; i < strategies.length; i++) {
+            IStrategy s = strategies[i];
+            if (pausedStrategies[s]) continue;
+            try s.balanceOf() returns (uint256 live) {
+                total += live;
+            } catch {
+                total += trackedBalance[s];
+            }
+        }
     }
 
     /// @dev maxWithdraw/maxRedeem account for pending performance fee dilution so that
