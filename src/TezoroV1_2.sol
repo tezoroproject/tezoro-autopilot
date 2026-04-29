@@ -862,10 +862,31 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         if (newBps > performanceFeeBps) {
             _consumeTimelockIfActive(keccak256(abi.encode("setPerformanceFee", newBps)));
         }
-        // Accrue at old rate before changing so yield isn't retroactively taxed at new rate
+        // Audit fix #13: refresh trackedBalance from live strategy reads
+        // BEFORE accruing the fee. Pre-fix, _accruePerformanceFee saw only
+        // the cached NAV, so yield earned but not yet reconciled became
+        // visible (and taxable) only after the fee change — and was then
+        // charged at the new rate.
+        _refreshTrackedBalances();
         _accruePerformanceFee();
         emit PerformanceFeeUpdated(performanceFeeBps, newBps);
         performanceFeeBps = newBps;
+    }
+
+    /// @dev Audit fix #13 helper: best-effort live read of every active
+    ///      strategy into trackedBalance. Mirrors reconcile()'s loop body
+    ///      without triggering _accruePerformanceFee or bumping the staleness
+    ///      timestamp (the caller controls fee accrual order).
+    function _refreshTrackedBalances() internal {
+        for (uint256 i = 0; i < strategies.length; i++) {
+            IStrategy strategy = strategies[i];
+            if (pausedStrategies[strategy]) continue;
+            try strategy.balanceOf() returns (uint256 balance) {
+                trackedBalance[strategy] = balance;
+            } catch {
+                // broken strategy — keep stale tracked balance, don't block
+            }
+        }
     }
 
     function setFeeRecipient(address newRecipient) external onlyAdmin {
