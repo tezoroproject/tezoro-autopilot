@@ -624,6 +624,76 @@ contract ERC4626MultiStrategyTest is Test {
         assertTrue(strategy.depositFrozenSubVaults(address(brokenVault)));
     }
 
+    // =========================================================================
+    // Audit fix #14 (Oak 2026-04-24): per-sub-vault read isolation
+    // =========================================================================
+
+    /// @notice Pre-fix, balanceOf() and availableLiquidity() on the parent
+    ///         strategy iterated sub-vaults without per-call try/catch. A
+    ///         single reverting child (deprecated/paused MetaMorpho-style
+    ///         vault) made the aggregate revert, which in turn:
+    ///           * bricked totalAssets-driven previews on the Tezoro vault, and
+    ///           * stalled the keeper rebalance loop (which reads strategy
+    ///             balances per iteration).
+    ///         Post-fix, the aggregator wraps each sub-vault read in try/catch
+    ///         so a broken child contributes 0 instead of poisoning the sum.
+    function test_auditFix14_balanceOfSurvivesBrokenSubVault() public {
+        // Healthy sub-vaults A and B already added in setUp; allocate to them.
+        _fundVaultAndApprove(500e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(500e6);
+
+        vm.prank(keeperAddr);
+        strategy.allocate(address(subVaultA), 200e6);
+        vm.prank(keeperAddr);
+        strategy.allocate(address(subVaultB), 100e6);
+
+        // Add a third sub-vault and allocate to it before breaking.
+        RevertingVault4626 brokenVault = new RevertingVault4626(IERC20(address(token)));
+        vm.prank(adminAddr);
+        strategy.addSubVault(address(brokenVault));
+
+        vm.prank(keeperAddr);
+        strategy.allocate(address(brokenVault), 150e6);
+
+        // Now break it. Pre-fix: balanceOf on the strategy reverts on the
+        // first read of brokenVault.balanceOf. Post-fix: revert is swallowed,
+        // broken vault contributes 0.
+        brokenVault.setBroken(true);
+
+        uint256 total = strategy.balanceOf();
+        // 50e6 idle + ~200e6 (A) + ~100e6 (B) + 0 (broken) = ~350e6.
+        // Allow ±2 wei rounding inside ERC4626 share math.
+        assertApproxEqAbs(total, 350e6, 2, "broken sub-vault must not poison balanceOf");
+    }
+
+    /// @notice Same regression on availableLiquidity: broken child must report 0
+    ///         to maxWithdraw/maxRedeem instead of bricking the parent's
+    ///         ERC-4626 view functions.
+    function test_auditFix14_availableLiquiditySurvivesBrokenSubVault() public {
+        _fundVaultAndApprove(500e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(500e6);
+
+        vm.prank(keeperAddr);
+        strategy.allocate(address(subVaultA), 200e6);
+        vm.prank(keeperAddr);
+        strategy.allocate(address(subVaultB), 100e6);
+
+        RevertingVault4626 brokenVault = new RevertingVault4626(IERC20(address(token)));
+        vm.prank(adminAddr);
+        strategy.addSubVault(address(brokenVault));
+
+        vm.prank(keeperAddr);
+        strategy.allocate(address(brokenVault), 150e6);
+
+        brokenVault.setBroken(true);
+
+        uint256 avail = strategy.availableLiquidity();
+        // 50e6 idle + ~200e6 (A) + ~100e6 (B) + 0 (broken) = ~350e6.
+        assertApproxEqAbs(avail, 350e6, 2, "broken sub-vault must not poison availableLiquidity");
+    }
+
     // ========== Helpers ==========
 
     function _fundVaultAndApprove(uint256 amount) internal {
@@ -657,5 +727,15 @@ contract RevertingVault4626 is ERC4626 {
     function redeem(uint256 shares, address receiver, address owner) public override returns (uint256) {
         if (broken) revert("broken");
         return super.redeem(shares, receiver, owner);
+    }
+
+    function balanceOf(address account) public view override(ERC20, IERC20) returns (uint256) {
+        if (broken) revert("broken");
+        return super.balanceOf(account);
+    }
+
+    function convertToAssets(uint256 shares) public view override returns (uint256) {
+        if (broken) revert("broken");
+        return super.convertToAssets(shares);
     }
 }
