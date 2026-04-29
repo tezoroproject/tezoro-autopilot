@@ -446,6 +446,18 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         if (!isActiveStrategy[strategy]) revert StrategyNotActive();
         _consumeTimelockIfActive(keccak256(abi.encode("removeStrategy", address(strategy))));
 
+        // Audit fix #34: refresh tracked from a live read first, so the
+        // recovery threshold below compares the recovered amount against
+        // reality (yield + principal) rather than a stale snapshot.
+        // Without this, a strategy with unreconciled yield could pass
+        // \"recovered >= tracked\" while quietly leaking the unreconciled
+        // portion.
+        try strategy.balanceOf() returns (uint256 live) {
+            trackedBalance[strategy] = live;
+        } catch {
+            // broken strategy — keep stale tracked
+        }
+
         // Audit fix #5: emergencyWithdraw must fully recover the tracked
         // balance before we drop the strategy from accounting. If the
         // underlying market is illiquid or the strategy is broken, this
@@ -522,6 +534,15 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function recallToIdle(IStrategy strategy) external onlyAdmin nonReentrant {
         if (!isActiveStrategy[strategy]) revert StrategyNotActive();
 
+        // Audit fix #34: refresh tracked from a live read so the recall
+        // request reflects unreconciled yield (which would otherwise stay
+        // behind in the strategy and silently dilute remaining LPs).
+        try strategy.balanceOf() returns (uint256 live) {
+            trackedBalance[strategy] = live;
+        } catch {
+            // broken strategy — keep stale tracked balance
+        }
+
         uint256 tracked = trackedBalance[strategy];
         if (tracked > 0) {
             uint256 withdrawn;
@@ -535,7 +556,13 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
 
             if (withdrawn > 0) {
                 if (withdrawn > trackedBalance[strategy]) {
-                    trackedBalance[strategy] = 0;
+                    // Audit fix #2 (parallel location): refresh live balance
+                    // instead of zeroing.
+                    try strategy.balanceOf() returns (uint256 liveBalance) {
+                        trackedBalance[strategy] = liveBalance;
+                    } catch {
+                        trackedBalance[strategy] = 0;
+                    }
                 } else {
                     trackedBalance[strategy] -= withdrawn;
                 }
@@ -554,6 +581,13 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             depositFrozenStrategies[strategy] = true;
             emit StrategyDepositFrozen(address(strategy));
         }
+
+        // Audit fix #19: revoke the strategy's spend allowance during recall
+        // so a faulty/compromised strategy cannot pull idle vault funds via
+        // its still-live ERC20 allowance after we have signalled distress.
+        // Approval is re-granted only if admin re-enables the strategy
+        // (unfreezeStrategyDeposits below).
+        IERC20(asset()).forceApprove(address(strategy), 0);
     }
 
     /// @notice Force-redeem all shares of a user, sending assets to the user (not admin).

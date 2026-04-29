@@ -61,11 +61,15 @@ contract AaveV3StrategyV1_2 is IStrategy {
     }
 
     function emergencyWithdraw() external override onlyVault returns (uint256 withdrawn) {
-        uint256 balance = aToken.balanceOf(address(this));
-        if (balance == 0) return 0;
-
-        // type(uint256).max tells Aave to withdraw everything
-        withdrawn = pool.withdraw(asset, type(uint256).max, vault);
+        // Audit fix #18: cap the request to current liquid reserves before
+        // calling pool.withdraw. Pre-fix, type(uint256).max asked Aave to
+        // pull the full aToken position, which reverts when reserve cash <
+        // position. removeStrategy / recallToIdle then treated a temporarily
+        // illiquid position as fully unrecoverable; the underlying tokens
+        // remained deposited and recoverable as soon as liquidity returned.
+        uint256 liquid = availableLiquidity();
+        if (liquid == 0) return 0;
+        withdrawn = pool.withdraw(asset, liquid, vault);
     }
 
     function balanceOf() external view override returns (uint256) {
