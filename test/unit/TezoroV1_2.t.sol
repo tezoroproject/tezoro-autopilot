@@ -3005,4 +3005,96 @@ contract TezoroV1_2Test is Test {
             "idle must absorb principal + previously-stale yield"
         );
     }
+
+    // =========================================================================
+    // Audit fix #23 (Oak 2026-04-24): timelock has a bounded execution window
+    // =========================================================================
+
+    /// @notice A proposal still inside the GRACE_PERIOD executes normally.
+    function test_auditFix23_timelockExecutesInsideGracePeriod() public {
+        vm.prank(admin);
+        vault.setTimelockDelay(1 days);
+
+        address rm = makeAddr("rm");
+        bytes32 opHash = keccak256(abi.encode("setRewardsModule", rm));
+        vm.prank(admin);
+        vault.proposeTimelock(opHash);
+
+        // Late but within grace.
+        vm.warp(block.timestamp + 1 days + vault.TIMELOCK_GRACE_PERIOD() - 1);
+
+        // Reconcile to clear the staleness gate (audit-fix(4)).
+        vault.reconcile();
+
+        vm.prank(admin);
+        vault.setRewardsModule(rm);
+        assertEq(vault.rewardsModule(), rm);
+    }
+
+    /// @notice A proposal executed past the GRACE_PERIOD reverts. Pre-fix,
+    ///         the execution window was unbounded — an admin could execute
+    ///         a long-stale proposal whose underlying assumptions had
+    ///         shifted (target address compromised, parameter no longer
+    ///         appropriate, threat model changed).
+    function test_auditFix23_timelockRevertsAfterGracePeriodExpires() public {
+        vm.prank(admin);
+        vault.setTimelockDelay(1 days);
+
+        address rm = makeAddr("rm");
+        bytes32 opHash = keccak256(abi.encode("setRewardsModule", rm));
+        vm.prank(admin);
+        vault.proposeTimelock(opHash);
+
+        // Past readyTimestamp + GRACE_PERIOD.
+        vm.warp(block.timestamp + 1 days + vault.TIMELOCK_GRACE_PERIOD() + 1);
+
+        vault.reconcile();
+
+        vm.prank(admin);
+        vm.expectRevert(TezoroV1_2.TimelockExpired.selector);
+        vault.setRewardsModule(rm);
+    }
+
+    /// @notice isTimelockReady reflects expiry: returns false past the
+    ///         grace window even though readyTimestamp has passed.
+    function test_auditFix23_isTimelockReadyFalseAfterExpiry() public {
+        vm.prank(admin);
+        vault.setTimelockDelay(1 days);
+
+        bytes32 opHash = keccak256(abi.encode("foo"));
+        vm.prank(admin);
+        vault.proposeTimelock(opHash);
+
+        // Inside window.
+        vm.warp(block.timestamp + 1 days + 1);
+        assertTrue(vault.isTimelockReady(opHash), "ready inside grace");
+
+        // Past grace.
+        vm.warp(block.timestamp + vault.TIMELOCK_GRACE_PERIOD());
+        assertFalse(vault.isTimelockReady(opHash), "expired past grace");
+    }
+
+    /// @notice An expired proposal can be re-proposed: cancelTimelock clears
+    ///         the slot and a fresh propose starts a new window.
+    function test_auditFix23_expiredProposalCanBeReproposed() public {
+        vm.prank(admin);
+        vault.setTimelockDelay(1 days);
+
+        bytes32 opHash = keccak256(abi.encode("foo"));
+        vm.prank(admin);
+        vault.proposeTimelock(opHash);
+
+        // Let it expire.
+        vm.warp(block.timestamp + 1 days + vault.TIMELOCK_GRACE_PERIOD() + 1);
+        assertFalse(vault.isTimelockReady(opHash));
+
+        vm.prank(admin);
+        vault.cancelTimelock(opHash);
+
+        vm.prank(admin);
+        vault.proposeTimelock(opHash);
+
+        vm.warp(block.timestamp + 1 days + 1);
+        assertTrue(vault.isTimelockReady(opHash));
+    }
 }

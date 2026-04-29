@@ -32,6 +32,13 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     ///         (permissionless), so users can self-unblock if the keeper falls
     ///         behind.
     uint256 public constant MAX_STALENESS = 1 hours;
+    /// @notice Bounded execution window for timelocked proposals. After
+    ///         readyTimestamp + TIMELOCK_GRACE_PERIOD a proposal expires and
+    ///         must be re-proposed; protects against stale-context execution
+    ///         where state or threat model has shifted between proposal and
+    ///         execution. Mirrors OpenZeppelin TimelockController's grace
+    ///         period; 7 days is the standard governance window.
+    uint256 public constant TIMELOCK_GRACE_PERIOD = 7 days;
 
     // --- Immutables ---
 
@@ -138,6 +145,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     error StrategyAssetMismatch();
     error WithdrawalFailed();
     error TimelockNotFound();
+    error TimelockExpired();
     error StrategyAlreadyDepositFrozen();
     error StrategyNotDepositFrozen();
     error NoSharesToRedeem();
@@ -1007,11 +1015,14 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         emit TimelockCancelled(operationHash);
     }
 
-    /// @notice Check if a timelocked operation is ready to execute
+    /// @notice Check if a timelocked operation is ready to execute. Returns
+    ///         false once the bounded execution window has expired (caller
+    ///         must re-propose).
     function isTimelockReady(bytes32 operationHash) public view returns (bool) {
         TimelockProposal storage proposal = timelockProposals[operationHash];
         return proposal.readyTimestamp > 0
             && block.timestamp >= proposal.readyTimestamp
+            && block.timestamp <= proposal.readyTimestamp + TIMELOCK_GRACE_PERIOD
             && !proposal.executed;
     }
 
@@ -1097,6 +1108,12 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         if (proposal.readyTimestamp == 0) revert TimelockNotFound();
         if (block.timestamp < proposal.readyTimestamp) revert TimelockNotReady();
         if (proposal.executed) revert TimelockAlreadyExecuted();
+        // Bounded execution window: a proposal that has been ready for longer
+        // than TIMELOCK_GRACE_PERIOD must be re-proposed. Pre-fix, an approved
+        // proposal could be executed indefinitely after readyTimestamp,
+        // letting a malicious or inattentive admin run a stale-context
+        // operation long after the system state or threat model had shifted.
+        if (block.timestamp > proposal.readyTimestamp + TIMELOCK_GRACE_PERIOD) revert TimelockExpired();
         proposal.executed = true;
     }
 
