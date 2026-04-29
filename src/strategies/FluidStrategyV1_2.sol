@@ -93,9 +93,17 @@ contract FluidStrategyV1_2 is IStrategy {
     }
 
     function isHealthy() external view override returns (bool) {
-        // Fluid holds assets in a Liquidity layer, not in fToken directly.
-        // Check that the fToken has active deposits (totalAssets > 0).
-        return fToken.totalAssets() > 0;
+        // Match isHealthy to the rebalancer's deposit decision: the strategy
+        // is healthy iff the fToken can presently accept new deposits.
+        // Pre-fix this checked fToken.totalAssets() > 0 — global market
+        // non-emptiness, which says nothing about depositability or
+        // withdrawability for THIS strategy. A market with third-party
+        // deposits but no current exit liquidity, or a fresh empty market,
+        // both reported the wrong signal. Post-fix uses fToken.maxDeposit
+        // (the standard ERC-4626 depositability quote — zero on pause,
+        // capacity exhausted, deprecated reserves), which mirrors the
+        // upstream gate the next deposit() call would actually hit.
+        return fToken.maxDeposit(address(this)) > 0;
     }
 
     function harvest(address) external pure override returns (uint256) {
