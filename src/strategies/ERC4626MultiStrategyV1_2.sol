@@ -313,6 +313,12 @@ contract ERC4626MultiStrategyV1_2 is IStrategy, ReentrancyGuard {
         if (!isApproved[subVault]) revert SubVaultNotApproved();
         if (depositFrozenSubVaults[subVault]) revert SubVaultAlreadyDepositFrozen();
         depositFrozenSubVaults[subVault] = true;
+        // Revoke the asset allowance so a still-approved-but-frozen child
+        // cannot pull idle strategy funds via its existing ERC-20 allowance.
+        // Pre-fix the freeze flag only blocked our own allocate() path; the
+        // child's transferFrom into idle balances accumulated from later
+        // deposits or other sub-vault redemptions remained possible.
+        IERC20(asset).forceApprove(subVault, 0);
         emit SubVaultDepositFrozen(subVault);
     }
 
@@ -320,6 +326,8 @@ contract ERC4626MultiStrategyV1_2 is IStrategy, ReentrancyGuard {
         if (!isApproved[subVault]) revert SubVaultNotApproved();
         if (!depositFrozenSubVaults[subVault]) revert SubVaultNotDepositFrozen();
         depositFrozenSubVaults[subVault] = false;
+        // Restore the allowance the freeze revoked, mirroring addSubVault.
+        IERC20(asset).forceApprove(subVault, type(uint256).max);
         emit SubVaultDepositUnfrozen(subVault);
     }
 
@@ -344,6 +352,10 @@ contract ERC4626MultiStrategyV1_2 is IStrategy, ReentrancyGuard {
             depositFrozenSubVaults[subVault] = true;
             emit SubVaultDepositFrozen(subVault);
         }
+        // Same allowance revocation as freezeSubVaultDeposits: a recalled
+        // child must not retain a live ERC-20 pull on idle balances that
+        // accumulate post-recall.
+        IERC20(asset).forceApprove(subVault, 0);
 
         emit SubVaultRecalled(subVault, recalled);
     }
