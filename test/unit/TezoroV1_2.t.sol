@@ -1748,8 +1748,9 @@ contract TezoroV1_2Test is Test {
         vm.prank(keeper);
         vault.rebalance(strats, bps);
 
-        // trackedBalance should be 0 (saturating subtraction)
-        assertEq(vault.trackedBalance(IStrategy(address(strategyA))), 0);
+        // Audit fix #2 (parallel location): trackedBalance is refreshed to the
+        // strategy's live balance, not zeroed.
+        assertEq(vault.trackedBalance(IStrategy(address(strategyA))), strategyA.balanceOf());
     }
 
     // =========================================================================
@@ -1776,8 +1777,9 @@ contract TezoroV1_2Test is Test {
         vm.prank(alice);
         vault.withdraw(maxW, alice, alice);
 
-        // trackedBalance should be 0 (saturating subtraction)
-        assertEq(vault.trackedBalance(IStrategy(address(strategyA))), 0);
+        // Audit fix #2: trackedBalance is refreshed to the strategy's live
+        // balance (was previously zeroed, hiding any leftover yield).
+        assertEq(vault.trackedBalance(IStrategy(address(strategyA))), strategyA.balanceOf());
     }
 
     // =========================================================================
@@ -2349,5 +2351,48 @@ contract TezoroV1_2Test is Test {
         vm.prank(alice);
         vm.expectRevert(TezoroV1_2.WithdrawalFailed.selector);
         vault.withdraw(maxW, alice, alice);
+    }
+
+    // =========================================================================
+    // Audit fix #2 (Oak 2026-04-24): refresh live trackedBalance on overdelivery
+    // =========================================================================
+
+    /// @notice Pre-fix, withdrawing more than the stale trackedBalance set
+    ///         trackedBalance to 0, hiding any unreconciled yield still held
+    ///         by the strategy and letting later depositors enter at a cheap
+    ///         price until the next reconcile.
+    /// @notice Post-fix, trackedBalance is refreshed to strategy.balanceOf()
+    ///         so accounting stays consistent with reality.
+    function test_auditFix2_overdeliveryRefreshesTrackedBalance() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        IStrategy[] memory strats = new IStrategy[](1);
+        uint256[] memory bpsList = new uint256[](1);
+        strats[0] = IStrategy(address(strategyA));
+        bpsList[0] = 9_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        // Inject hidden balance into the strategy (simulates unreconciled yield).
+        uint256 hiddenYield = 50_000e6;
+        strategyA.simulateYield(hiddenYield);
+
+        // Force the next strategy.withdraw to return more than asked, mimicking
+        // the audit scenario where a withdrawal drains part of the unreconciled
+        // yield alongside the requested principal.
+        uint256 overdeliver = 20_000e6;
+        strategyA.setExtraWithdraw(overdeliver);
+
+        uint256 maxW = vault.maxWithdraw(alice);
+        vm.prank(alice);
+        vault.withdraw(maxW, alice, alice);
+
+        // Post-fix: trackedBalance equals strategy.balanceOf() — the leftover
+        // yield is preserved in vault accounting instead of being zeroed.
+        uint256 trackedAfter = vault.trackedBalance(IStrategy(address(strategyA)));
+        uint256 liveAfter = strategyA.balanceOf();
+        assertEq(trackedAfter, liveAfter, "trackedBalance must equal live balance");
+        assertGt(trackedAfter, 0, "yield remainder must not be erased from accounting");
     }
 }

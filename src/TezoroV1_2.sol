@@ -622,9 +622,15 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
                 if (maxDeviationBps > 0 && toWithdraw.mulDiv(BPS, total) < maxDeviationBps) continue;
 
                 try strategy.withdraw(toWithdraw) returns (uint256 withdrawn) {
-                    // Safe subtraction: strategy may return slightly more than tracked due to rounding
+                    // Audit fix #2 (parallel location): refresh live balance instead of zeroing.
+                    // Same defect class as the user-withdrawal path: stale tracked +
+                    // overdelivery used to hide unreconciled yield.
                     if (withdrawn > trackedBalance[strategy]) {
-                        trackedBalance[strategy] = 0;
+                        try strategy.balanceOf() returns (uint256 liveBalance) {
+                            trackedBalance[strategy] = liveBalance;
+                        } catch {
+                            trackedBalance[strategy] = 0;
+                        }
                     } else {
                         trackedBalance[strategy] -= withdrawn;
                     }
@@ -957,7 +963,15 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
                 uint256 toWithdraw = remaining > available ? available : remaining;
                 try strategy.withdraw(toWithdraw) returns (uint256 withdrawn) {
                     if (withdrawn > trackedBalance[strategy]) {
-                        trackedBalance[strategy] = 0;
+                        // Audit fix #2: refresh live balance instead of zeroing.
+                        // Pre-fix, zeroing trackedBalance hid unreconciled yield
+                        // still held by the strategy, letting later depositors
+                        // enter at a stale (cheap) price until the next reconcile.
+                        try strategy.balanceOf() returns (uint256 liveBalance) {
+                            trackedBalance[strategy] = liveBalance;
+                        } catch {
+                            trackedBalance[strategy] = 0;
+                        }
                     } else {
                         trackedBalance[strategy] -= withdrawn;
                     }
