@@ -112,7 +112,10 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     event StrategyDepositUnfrozen(address indexed strategy);
     event RecalledToIdle(address indexed strategy, uint256 amount);
     event RecallFailed(address indexed strategy, uint256 trackedAmount);
-    event StrategyRemovalFundsLost(address indexed strategy, uint256 lostAmount);
+    // Removed by audit fix #5: removeStrategy now reverts with
+    // StrategyNotFullyRecovered instead of emitting a "funds lost" notice
+    // and clearing accounting. Listeners that watched this event should
+    // monitor the StrategyNotFullyRecovered revert reason instead.
     event ForceRedeemed(address indexed user, uint256 shares, uint256 assets);
 
     // --- Errors ---
@@ -147,6 +150,10 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     ///      NAV used by share-pricing has not been refreshed within MAX_STALENESS.
     ///      Caller can call reconcile() (permissionless) to unblock.
     error StaleNAV();
+    /// @dev Audit fix #5: thrown by removeStrategy when emergencyWithdraw
+    ///      fails to recover the full tracked balance. Admin should call
+    ///      recallToIdle or wait for liquidity before retrying.
+    error StrategyNotFullyRecovered();
 
     // --- Modifiers ---
 
@@ -398,14 +405,19 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         if (!isActiveStrategy[strategy]) revert StrategyNotActive();
         _consumeTimelockIfActive(keccak256(abi.encode("removeStrategy", address(strategy))));
 
-        // Withdraw everything first (try-catch: broken strategy cannot block removal)
+        // Audit fix #5: emergencyWithdraw must fully recover the tracked
+        // balance before we drop the strategy from accounting. If the
+        // underlying market is illiquid or the strategy is broken, this
+        // call reverts (or returns less than tracked), and pre-fix the
+        // vault still zeroed trackedBalance and removed the strategy —
+        // understating totalAssets and underpricing shares for everyone
+        // remaining. Post-fix the strategy stays active; admin must call
+        // recallToIdle or wait for liquidity, then retry.
         uint256 tracked = trackedBalance[strategy];
         uint256 balBefore = IERC20(asset()).balanceOf(address(this));
         try strategy.emergencyWithdraw() {} catch {}
         uint256 recovered = IERC20(asset()).balanceOf(address(this)) - balBefore;
-        if (tracked > 0 && recovered < tracked) {
-            emit StrategyRemovalFundsLost(address(strategy), tracked - recovered);
-        }
+        if (recovered < tracked) revert StrategyNotFullyRecovered();
         trackedBalance[strategy] = 0;
 
         // Remove from array (swap-and-pop)
