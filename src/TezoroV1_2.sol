@@ -483,12 +483,19 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function pauseStrategy(IStrategy strategy) external onlyGuardianOrAdmin {
         if (!isActiveStrategy[strategy]) revert StrategyNotActive();
         pausedStrategies[strategy] = true;
+        // Audit fix #17: revoke the strategy's spend allowance on pause so
+        // a compromised or misbehaving paused strategy cannot pull idle
+        // vault funds via its still-live ERC20 allowance.
+        IERC20(asset()).forceApprove(address(strategy), 0);
         emit StrategyPaused(address(strategy));
     }
 
     function unpauseStrategy(IStrategy strategy) external onlyAdmin {
         if (!isActiveStrategy[strategy]) revert StrategyNotActive();
         pausedStrategies[strategy] = false;
+        // Audit fix #17: restore the spend allowance only when the strategy
+        // is intentionally unpaused (mirrors the addStrategy approval path).
+        IERC20(asset()).forceApprove(address(strategy), type(uint256).max);
         emit StrategyUnpaused(address(strategy));
     }
 
