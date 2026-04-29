@@ -206,6 +206,22 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
 
     // --- Constructor ---
 
+    /// @param idleBufferBps_ Target idle buffer as a fraction of totalAssets,
+    ///        in basis points. Bounded above by MAX_IDLE_BUFFER_BPS (20%).
+    ///
+    ///        Setting `idleBufferBps_ = 0` is intentionally supported for
+    ///        the most aggressive risk tier, where deploying 100% of
+    ///        capital to strategies maximises yield and operators accept
+    ///        that user withdrawals always pay a strategy round-trip.
+    ///        It is NOT a misconfiguration. With `0`:
+    ///          * the rebalancer holds no withdrawal cushion;
+    ///          * every user withdrawal triggers strategy.withdraw paths
+    ///            (gas + protocol-side rounding);
+    ///          * the keeper still maintains a small idle balance between
+    ///            rebalances purely from strategy round-trip mismatches.
+    ///        Choose `0` only when the vault tier explicitly accepts these
+    ///        characteristics; conservative tiers should configure 200-500
+    ///        BPS (2-5%) to match typical user-facing redemption load.
     constructor(
         IERC20 asset_,
         string memory name_,
