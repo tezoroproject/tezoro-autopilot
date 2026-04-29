@@ -35,6 +35,7 @@ contract V1TestStrategy is IStrategy {
     bool public depositBroken = false; // deposit reverts but isHealthy works
     bool public withdrawBroken = false; // withdraw reverts but availableLiquidity works
     uint256 public extraWithdraw = 0; // extra tokens to return beyond requested amount
+    uint256 public shortWithdraw = 0; // simulate underdelivery (e.g. underlying-protocol rounding)
 
     // Reward token support
     mapping(address => uint256) public rewardBalances;
@@ -53,6 +54,8 @@ contract V1TestStrategy is IStrategy {
         if (broken || withdrawBroken) revert("broken");
         uint256 toSend = amount > _balance ? _balance : amount;
         toSend += extraWithdraw; // simulate returning more than requested
+        if (toSend > shortWithdraw) toSend -= shortWithdraw;
+        else toSend = 0;
         if (toSend > _balance) toSend = _balance;
         _balance -= toSend;
         IERC20(asset).safeTransfer(msg.sender, toSend);
@@ -118,6 +121,10 @@ contract V1TestStrategy is IStrategy {
 
     function setExtraWithdraw(uint256 extra) external {
         extraWithdraw = extra;
+    }
+
+    function setShortWithdraw(uint256 short) external {
+        shortWithdraw = short;
     }
 
     function simulateYield(uint256 amount) external {
@@ -2280,5 +2287,67 @@ contract TezoroV1_2Test is Test {
         vault.forceRedeem(alice);
 
         assertEq(vault.balanceOf(alice), 0, "Alice should have 0 shares after force redeem");
+    }
+
+    // =========================================================================
+    // Audit fix #1 (Oak 2026-04-24): bounded dust tolerance in normal withdraw
+    // =========================================================================
+
+    /// @notice Pre-fix, _withdraw reverted whenever the cumulative strategy
+    ///         underdelivery was non-zero. Post-fix, a normal user withdrawal
+    ///         absorbs shortfalls up to _dustTolerance (per-strategy 2 wei OR
+    ///         1 bps of assets) instead of bricking the user exit path.
+    function test_auditFix1_underdeliveryWithinToleranceSucceeds() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        // Allocate 90% to strategyA so the withdrawal must hit the strategy.
+        IStrategy[] memory strats = new IStrategy[](1);
+        uint256[] memory bpsList = new uint256[](1);
+        strats[0] = IStrategy(address(strategyA));
+        bpsList[0] = 9_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        // Simulate a small rounding loss (1 wei) inside the strategy adapter.
+        strategyA.setShortWithdraw(1);
+
+        // maxWithdraw already subtracts the per-strategy safety margin (2 wei),
+        // so asking for it bypasses ERC4626's upfront ExceededMaxWithdraw guard
+        // and exercises the post-execution underdelivery path that fix #1 patches.
+        uint256 maxW = vault.maxWithdraw(alice);
+        uint256 balanceBefore = token.balanceOf(alice);
+        vm.prank(alice);
+        vault.withdraw(maxW, alice, alice);
+        uint256 balanceAfter = token.balanceOf(alice);
+
+        // User receives maxW - 1 wei; the dust is absorbed by the tolerance.
+        assertEq(balanceAfter - balanceBefore, maxW - 1, "user should receive maxW - dust");
+    }
+
+    /// @notice Shortfalls above the dust tolerance still revert. Tolerance is
+    ///         meant for protocol rounding, not silent value loss.
+    function test_auditFix1_underdeliveryAboveToleranceReverts() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        IStrategy[] memory strats = new IStrategy[](1);
+        uint256[] memory bpsList = new uint256[](1);
+        strats[0] = IStrategy(address(strategyA));
+        bpsList[0] = 9_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        uint256 maxW = vault.maxWithdraw(alice);
+        // _dustTolerance(maxW) = max(strategiesCount * 2, maxW / BPS).
+        uint256 perStrategy = vault.strategiesCount() * 2;
+        uint256 bpsBased = maxW / vault.BPS();
+        uint256 tolerance = perStrategy > bpsBased ? perStrategy : bpsBased;
+
+        strategyA.setShortWithdraw(tolerance + 1);
+
+        vm.prank(alice);
+        vm.expectRevert(TezoroV1_2.WithdrawalFailed.selector);
+        vault.withdraw(maxW, alice, alice);
     }
 }

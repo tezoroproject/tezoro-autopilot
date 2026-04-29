@@ -333,7 +333,12 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         _burn(owner, shares);
 
         uint256 totalWithdrawn = _executeWithdrawal(receiver, assets);
-        if (totalWithdrawn < assets) revert WithdrawalFailed();
+        // Audit fix #1: reuse forceRedeem's dust tolerance (per-strategy rounding
+        // OR 1 bps of the asset amount, whichever is larger) so a normal user
+        // withdrawal is not blocked when one or more underlying protocols return
+        // slightly less than requested due to rounding. Larger shortfalls (e.g.,
+        // undisclosed exit fees) still revert.
+        if (totalWithdrawn + _dustTolerance(assets) < assets) revert WithdrawalFailed();
         emit Withdraw(caller, receiver, owner, totalWithdrawn, shares);
     }
 
