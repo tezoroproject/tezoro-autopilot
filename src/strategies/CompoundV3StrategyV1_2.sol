@@ -23,6 +23,11 @@ contract CompoundV3StrategyV1_2 is IStrategy {
     error NotVault();
     error ZeroAddress();
     error CannotSweepAsset();
+    /// @dev Audit fix #16: thrown by the constructor when the configured
+    ///      Comet's baseToken() does not match `asset_`. Prevents deploying
+    ///      a strategy that would silently push funds into Comet's
+    ///      collateral path instead of the base-supply path.
+    error BaseTokenMismatch();
 
     modifier onlyVault() {
         if (msg.sender != vault) revert NotVault();
@@ -35,6 +40,12 @@ contract CompoundV3StrategyV1_2 is IStrategy {
         if (asset_ == address(0) || comet_ == address(0) || vault_ == address(0)) {
             revert ZeroAddress();
         }
+        // Audit fix #16: enforce that asset_ is Comet's base token. Without
+        // this check, a Comet that accepts asset_ as collateral instead would
+        // silently swallow deposits into the collateral position and the
+        // adapter's withdraw / balanceOf paths (which assume base-supply)
+        // would short-circuit, stranding funds.
+        if (ICompoundV3Comet(comet_).baseToken() != asset_) revert BaseTokenMismatch();
 
         asset = asset_;
         comet = ICompoundV3Comet(comet_);
