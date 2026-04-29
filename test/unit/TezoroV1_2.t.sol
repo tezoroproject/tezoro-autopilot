@@ -2395,4 +2395,65 @@ contract TezoroV1_2Test is Test {
         assertEq(trackedAfter, liveAfter, "trackedBalance must equal live balance");
         assertGt(trackedAfter, 0, "yield remainder must not be erased from accounting");
     }
+
+    // =========================================================================
+    // Audit fix #3 (Oak 2026-04-24): include RewardsModule base-asset balance
+    //                                in totalAssets
+    // =========================================================================
+
+    /// @notice Pre-fix, base-asset rewards already swapped and parked in the
+    ///         RewardsModule (waiting for sweepToVault) were not counted in
+    ///         totalAssets. A depositor in that window minted shares against
+    ///         a stale, lower NAV and captured part of the prior yield once
+    ///         the sweep landed.
+    function test_auditFix3_pendingRewardsIncludedInTotalAssets() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        address rm = makeAddr("rewards");
+        vm.prank(admin);
+        vault.setRewardsModule(rm);
+
+        uint256 totalBefore = vault.totalAssets();
+
+        // Simulate a swap landing base-asset rewards in the RewardsModule
+        // (post-swap, pre-sweep window).
+        uint256 rewardAmount = 10_000e6;
+        token.mint(rm, rewardAmount);
+
+        // Post-fix: totalAssets reflects the parked rewards immediately.
+        assertEq(
+            vault.totalAssets(),
+            totalBefore + rewardAmount,
+            "totalAssets must include base-asset rewards parked in RewardsModule"
+        );
+    }
+
+    /// @notice Bob's deposit during the post-swap, pre-sweep window mints fewer
+    ///         shares than the same deposit before the rewards landed. Pre-fix,
+    ///         the rewards were invisible and bob got identical shares for the
+    ///         same assets — capturing prior yield. Post-fix, the rewards are
+    ///         priced in, so bob is correctly diluted.
+    function test_auditFix3_depositInRewardWindowDoesNotCheapen() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        address rm = makeAddr("rewards");
+        vm.prank(admin);
+        vault.setRewardsModule(rm);
+
+        uint256 bobDeposit = 10_000e6;
+        // Reference: bob's shares before any rewards land in the module.
+        uint256 sharesBefore = vault.previewDeposit(bobDeposit);
+
+        // Reward sitting in the RewardsModule, not yet swept.
+        uint256 rewardAmount = 10_000e6;
+        token.mint(rm, rewardAmount);
+
+        uint256 sharesAfter = vault.previewDeposit(bobDeposit);
+
+        // Post-fix: rewards in the module raise totalAssets, so the same
+        // deposit mints strictly fewer shares — no cheap entry.
+        assertLt(sharesAfter, sharesBefore, "depositor in reward window must not mint stale-priced shares");
+    }
 }

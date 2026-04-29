@@ -192,6 +192,15 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     ///         shares offset (_decimalsOffset) makes idle-donation attacks economically infeasible.
     function totalAssets() public view override returns (uint256) {
         uint256 total = IERC20(asset()).balanceOf(address(this));
+        // Audit fix #3: include base-asset rewards already swapped and parked
+        // in the RewardsModule. These are inbound to the vault via the
+        // module-only depositRewards() path, so they belong to existing
+        // shareholders and must be priced into shares before sweepToVault
+        // executes. Without this, deposits made between swap and sweep would
+        // capture prior yield.
+        if (rewardsModule != address(0)) {
+            total += IERC20(asset()).balanceOf(rewardsModule);
+        }
         for (uint256 i = 0; i < strategies.length; i++) {
             if (!pausedStrategies[strategies[i]]) {
                 total += trackedBalance[strategies[i]];

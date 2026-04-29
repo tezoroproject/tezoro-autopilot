@@ -370,12 +370,22 @@ contract RewardsModuleTest is Test {
         uint256 rewardUsdc = 1_000e6; // 1k USDC rewards
         usdc.mint(address(module), rewardUsdc);
 
-        uint256 assetsBefore = vault.totalAssets();
+        // Audit fix #3: parked rewards are already in totalAssets, so the
+        // sweep moves them from module to vault.idle without changing the
+        // aggregate. The contract-level invariant is "vault.idle gained
+        // exactly rewardUsdc and module is now empty".
+        uint256 totalAssetsBefore = vault.totalAssets();
+        uint256 vaultIdleBefore = usdc.balanceOf(address(vault));
         vm.prank(keeper);
         module.sweepToVault();
 
-        uint256 assetsAfter = vault.totalAssets();
-        assertEq(assetsAfter - assetsBefore, rewardUsdc, "totalAssets must increase by exact reward amount");
+        assertEq(vault.totalAssets(), totalAssetsBefore, "totalAssets must be invariant across sweep");
+        assertEq(
+            usdc.balanceOf(address(vault)) - vaultIdleBefore,
+            rewardUsdc,
+            "vault idle must increase by exact reward amount"
+        );
+        assertEq(usdc.balanceOf(address(module)), 0, "module must be empty after sweep");
     }
 
     function test_sweepToVault_increasesSharePrice() public {
@@ -418,6 +428,13 @@ contract RewardsModuleTest is Test {
         vm.prank(admin);
         module.setRouterWhitelist(address(router), true);
 
+        // Baseline fee shares: captured before any reward activity. Post audit-fix #3
+        // depositRewards accrues fees the moment the swap output lands in the module
+        // (RM balance is already in totalAssets), so the accrual timing shifts from
+        // step 5 (withdraw) to step 4 (sweep). The cycle-wide invariant — fees DID
+        // accrue from the rewards yield — is what we assert here.
+        uint256 feeSharesAtCycleStart = vault.balanceOf(makeAddr("feeRecipient"));
+
         // --- Step 1: Strategy accrues 1k RWD reward tokens ---
         uint256 rewardTokens = 1_000e18;
         strategy.simulateRewardAccrual(rewardTokens);
@@ -440,27 +457,34 @@ contract RewardsModuleTest is Test {
         assertEq(usdc.balanceOf(address(module)), rewardUsdc, "Step 3: USDC in module after swap");
 
         // --- Step 4: Keeper sweeps USDC to vault ---
-        uint256 assetsBefore = vault.totalAssets();
-        uint256 sharePriceBefore = vault.convertToAssets(10 ** vault.decimals());
+        // Audit fix #3: the share-price increase is realised at swap time
+        // (rewards become visible in totalAssets the moment they land in
+        // the RewardsModule). The sweep is a custodial move from module to
+        // vault.idle that leaves totalAssets unchanged.
+        uint256 totalAssetsBefore = vault.totalAssets();
+        uint256 vaultIdleBefore = usdc.balanceOf(address(vault));
 
         vm.prank(keeper);
         module.sweepToVault();
 
-        // Vault totalAssets increased by exact reward amount
-        uint256 assetsAfter = vault.totalAssets();
-        assertEq(assetsAfter - assetsBefore, rewardUsdc, "Step 4: totalAssets +1k USDC");
+        assertEq(vault.totalAssets(), totalAssetsBefore, "Step 4: totalAssets invariant across sweep");
+        assertEq(
+            usdc.balanceOf(address(vault)) - vaultIdleBefore,
+            rewardUsdc,
+            "Step 4: vault idle gained reward amount"
+        );
 
-        // Share price increased — all depositors benefit
+        // Share price already reflects the rewards since they landed in the
+        // module — verify the steady-state benefit to all depositors.
         uint256 sharePriceAfter = vault.convertToAssets(10 ** vault.decimals());
-        assertGt(sharePriceAfter, sharePriceBefore, "Step 4: share price increased");
+        assertGt(sharePriceAfter, 1e6, "Step 4: share price above initial after rewards");
 
-        // --- Step 5: Fee accrues on next withdrawal (rewards pushed share price above HWM) ---
-        uint256 feeSharesBefore = vault.balanceOf(makeAddr("feeRecipient"));
+        // --- Step 5: Fee already accrued during sweep (post audit-fix #3) ---
         vm.prank(alice);
         vault.withdraw(1e6, alice, alice);
-        uint256 feeSharesAfter = vault.balanceOf(makeAddr("feeRecipient"));
+        uint256 feeSharesAtCycleEnd = vault.balanceOf(makeAddr("feeRecipient"));
 
-        assertGt(feeSharesAfter, feeSharesBefore, "Step 5: fee accrued on withdrawal after rewards");
+        assertGt(feeSharesAtCycleEnd, feeSharesAtCycleStart, "Step 5: fee accrued across reward cycle");
     }
 
     // =========================================================================
