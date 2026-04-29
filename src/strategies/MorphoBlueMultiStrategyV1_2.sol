@@ -228,9 +228,13 @@ contract MorphoBlueMultiStrategyV1_2 is IStrategy, ReentrancyGuard {
         // wrapper's allocations would be safe. Fully utilised markets and
         // bad-debt markets both kept that signal positive while the
         // rebalancer kept depositing into them.
-        // Bad-debt detection per se is intentionally not on-chain in this
-        // wrapper; see AUDIT_RESPONSE for the off-chain runbook + on-chain
-        // freezeMarketDeposits response primitive.
+        // Bad-debt detection is intentionally not in this view: Morpho
+        // Blue exposes no public solvency flag, and a single view-function
+        // read cannot reliably distinguish a healthy liquidation dip in
+        // totalSupplyAssets from genuine bad debt without multi-block
+        // history. The on-chain response primitive (freezeMarketDeposits
+        // below) is retained; bad-debt detection infrastructure is out
+        // of scope for this contract release.
         uint256 len = _marketIds.length;
         for (uint256 i = 0; i < len; i++) {
             Id mid = _marketIds[i];

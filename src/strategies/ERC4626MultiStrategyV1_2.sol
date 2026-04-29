@@ -249,7 +249,7 @@ contract ERC4626MultiStrategyV1_2 is IStrategy, ReentrancyGuard {
         // capacity-exhausted, or operationally retired.
         // Each maxDeposit read is wrapped in try/catch so a single broken
         // child cannot brick the aggregate (same isolation principle as
-        // balanceOf/availableLiquidity post audit-fix(14)).
+        // the per-sub-vault try/catch on balanceOf and availableLiquidity).
         uint256 len = _subVaults.length;
         for (uint256 i = 0; i < len; i++) {
             address sv = _subVaults[i];
