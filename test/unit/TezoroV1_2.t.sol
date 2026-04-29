@@ -36,6 +36,7 @@ contract V1TestStrategy is IStrategy {
     bool public withdrawBroken = false; // withdraw reverts but availableLiquidity works
     uint256 public extraWithdraw = 0; // extra tokens to return beyond requested amount
     uint256 public shortWithdraw = 0; // simulate underdelivery (e.g. underlying-protocol rounding)
+    uint256 public emergencyShortfall = 0; // amount stranded in the strategy on emergencyWithdraw
 
     // Reward token support
     mapping(address => uint256) public rewardBalances;
@@ -64,10 +65,14 @@ contract V1TestStrategy is IStrategy {
 
     function emergencyWithdraw() external override returns (uint256) {
         if (fullyBroken) revert("fully broken");
-        uint256 bal = _balance;
-        _balance = 0;
-        IERC20(asset).safeTransfer(msg.sender, bal);
-        return bal;
+        uint256 toSend = _balance > emergencyShortfall ? _balance - emergencyShortfall : 0;
+        // Leave `emergencyShortfall` worth of tokens parked in the strategy
+        // (and reflected in _balance) — models an underlying market that
+        // could not service the full recall (illiquid reserve, undisclosed
+        // exit fee, in-flight yield not yet redeemable).
+        _balance -= toSend;
+        IERC20(asset).safeTransfer(msg.sender, toSend);
+        return toSend;
     }
 
     function balanceOf() external view override returns (uint256) {
@@ -125,6 +130,10 @@ contract V1TestStrategy is IStrategy {
 
     function setShortWithdraw(uint256 short) external {
         shortWithdraw = short;
+    }
+
+    function setEmergencyShortfall(uint256 shortfall) external {
+        emergencyShortfall = shortfall;
     }
 
     function simulateYield(uint256 amount) external {
@@ -2903,6 +2912,97 @@ contract TezoroV1_2Test is Test {
             token.allowance(address(vault), address(strategyA)),
             0,
             "recallToIdle must revoke allowance"
+        );
+    }
+
+    // =========================================================================
+    // Audit fix #34 (Oak 2026-04-24): removeStrategy/recallToIdle refresh
+    //                                 trackedBalance from a live read first
+    // =========================================================================
+
+    /// @notice removeStrategy must refresh trackedBalance from a live read
+    ///         BEFORE comparing the recovered amount against tracked. Pre-fix,
+    ///         a stale tracked snapshot could let `recovered >= tracked` pass
+    ///         while the underlying market still held unreconciled yield —
+    ///         the strategy was dropped from accounting, the leftover stranded.
+    ///         Post-fix, the live refresh raises tracked to include the yield,
+    ///         and emergencyWithdraw must recover the larger figure (or the
+    ///         call reverts with StrategyNotFullyRecovered).
+    function test_auditFix34_removeStrategyRefusesPartialRecoveryAfterRefresh() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        IStrategy[] memory strats = new IStrategy[](1);
+        uint256[] memory bpsList = new uint256[](1);
+        strats[0] = IStrategy(address(strategyA));
+        bpsList[0] = 5_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        // Unreconciled yield landing in the strategy.
+        strategyA.simulateYield(10_000e6);
+        // tracked is still stale at this point — the bug surface.
+        uint256 trackedStale = vault.trackedBalance(IStrategy(address(strategyA)));
+        assertEq(trackedStale, 50_000e6, "precondition: tracked stale pre-refresh");
+
+        // The 10k of yield is not recoverable via emergencyWithdraw (e.g. an
+        // illiquid market or undisclosed exit fee). emergencyWithdraw returns
+        // only the 50k of principal.
+        strategyA.setEmergencyShortfall(10_000e6);
+
+        // Pre-fix: tracked stays at 50k, emergencyWithdraw returns 50k,
+        //          recovered >= tracked → silently drops the strategy and
+        //          strands the 10k yield in the strategy contract.
+        // Post-fix: refresh raises tracked to 60k; the call reverts because
+        //          the recovered 50k < tracked 60k.
+        vm.prank(admin);
+        vm.expectRevert(TezoroV1_2.StrategyNotFullyRecovered.selector);
+        vault.removeStrategy(IStrategy(address(strategyA)));
+    }
+
+    /// @notice recallToIdle must also refresh tracked from a live read; pre-fix
+    ///         the recall asked the strategy to withdraw the stale (lower)
+    ///         tracked amount, leaving the unreconciled yield stranded inside
+    ///         the strategy and silently diluting remaining LPs.
+    function test_auditFix34_recallToIdleRefreshesTrackedBeforeWithdraw() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        IStrategy[] memory strats = new IStrategy[](1);
+        uint256[] memory bpsList = new uint256[](1);
+        strats[0] = IStrategy(address(strategyA));
+        bpsList[0] = 5_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        // Snapshot vault idle right after rebalance — this is the baseline
+        // the recall idle must build on.
+        uint256 idleBeforeYield = token.balanceOf(address(vault));
+
+        strategyA.simulateYield(10_000e6);
+        // tracked still stale.
+        assertEq(
+            vault.trackedBalance(IStrategy(address(strategyA))),
+            50_000e6,
+            "precondition: tracked stale pre-refresh"
+        );
+
+        // Post-fix: refresh raises tracked to 60k, withdraw(60k) drains
+        //           principal + yield, idle gains the full 60k.
+        // Pre-fix:  withdraw(50k) only — yield strands inside the strategy.
+        vm.prank(admin);
+        vault.recallToIdle(IStrategy(address(strategyA)));
+
+        assertEq(
+            vault.trackedBalance(IStrategy(address(strategyA))),
+            0,
+            "post-recall tracked must reflect live (post-withdraw) balance"
+        );
+        // Idle absorbed the full 60k (50k principal + 10k yield).
+        assertEq(
+            token.balanceOf(address(vault)),
+            idleBeforeYield + 60_000e6,
+            "idle must absorb principal + previously-stale yield"
         );
     }
 }
