@@ -35,7 +35,10 @@ contract FluidStrategyV1_2 is IStrategy {
         if (asset_ == address(0) || fToken_ == address(0) || vault_ == address(0)) {
             revert ZeroAddress();
         }
-        // Cross-check the fToken_'s underlying matches asset_ (audit-fix(26)).
+        // Cross-check the fToken_'s underlying matches asset_ — without
+        // This, a mismatched fToken would deploy cleanly and only fail at
+        // The first live deposit (atomic revert; no silent loss, but a
+        // Wiring error shifted from deploy-time to runtime).
         if (IERC4626(fToken_).asset() != asset_) revert FluidTokenMismatch();
 
         asset = asset_;

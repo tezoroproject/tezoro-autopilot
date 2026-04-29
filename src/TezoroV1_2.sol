@@ -119,10 +119,6 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     event StrategyDepositUnfrozen(address indexed strategy);
     event RecalledToIdle(address indexed strategy, uint256 amount);
     event RecallFailed(address indexed strategy, uint256 trackedAmount);
-    // Removed by audit fix #5: removeStrategy now reverts with
-    // StrategyNotFullyRecovered instead of emitting a "funds lost" notice
-    // And clearing accounting. Listeners that watched this event should
-    // Monitor the StrategyNotFullyRecovered revert reason instead.
     event ForceRedeemed(address indexed user, uint256 shares, uint256 assets);
 
     // --- Errors ---
@@ -284,11 +280,11 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function maxDeposit(address) public view override returns (uint256) {
         if (paused) return 0;
         if (depositCap == 0) return type(uint256).max;
-        // Use live strategy balances for cap enforcement so a
-        // Depositor cannot slip through while trackedBalance is stale (a
-        // Window bounded but not eliminated by audit-fix(4)). totalAssets()
-        // Is still used for share-pricing; only the cap check sees live
-        // Values.
+        // Use live strategy balances for cap enforcement so a depositor
+        // Cannot slip through while trackedBalance is stale (a window
+        // Bounded but not eliminated by the staleness invariant).
+        // totalAssets() is still used for share-pricing; only the cap
+        // Check sees live values.
         uint256 total = _liveTotalAssets();
         if (total >= depositCap) return 0;
         return depositCap - total;
@@ -757,7 +753,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             uint256 currentBalance = trackedBalance[strategy];
 
             if (targetBalance > currentBalance && !depositFrozenStrategies[strategy] && healthy) {
-                // Need to deposit more (skip if deposit-frozen or unhealthy — audit fix #12)
+                // Need to deposit more (skip if deposit-frozen or unhealthy)
                 uint256 toDeposit = targetBalance - currentBalance;
 
                 // Respect deviation threshold: only rebalance if deviation exceeds threshold

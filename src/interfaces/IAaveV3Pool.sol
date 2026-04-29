@@ -31,8 +31,8 @@ interface IAaveV3Pool {
         );
 
     /// @notice Reserve configuration bitmap. ABI-equivalent to the single-field
-    ///         ReserveConfigurationMap struct that Aave V3 returns. Used by audit
-    ///         fix #7 to read pause/active flags without destructuring the full
-    ///         getReserveData tuple (which trips Solidity's stack-depth limit).
+    ///         ReserveConfigurationMap struct that Aave V3 returns. Reads
+    ///         pause/active flags without destructuring the full getReserveData
+    ///         tuple (which trips Solidity's stack-depth limit).
     function getConfiguration(address asset) external view returns (uint256);
 }
