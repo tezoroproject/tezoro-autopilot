@@ -240,6 +240,36 @@ contract AaveV3StrategyV1_2Test is Test {
     }
 
     // =========================================================================
+    // Audit fix #29 (Oak 2026-04-24): isHealthy combines config flags AND
+    //                                 pool liquidity. Already covered by the
+    //                                 fix landed under audit-fix(8); this
+    //                                 test pins down the liquidity branch.
+    // =========================================================================
+
+    /// @notice Reserve flags say the market is healthy but the aToken
+    ///         contract has zero underlying — isHealthy must still report
+    ///         false. Pre-fix the V1_1 predicate `liquidity > 0` was the
+    ///         ONLY check; post-fix this branch is the second leg of the
+    ///         AND combined with the ACTIVE/!FROZEN/!PAUSED config decode.
+    ///         Without this test, a regression that drops the liquidity
+    ///         leg would silently misreport an empty deprecated reserve
+    ///         as healthy.
+    function test_auditFix29_isHealthyFalseWhenPoolLiquidityZero() public {
+        // Strategy seeded in setUp; reserve config already healthy.
+        assertTrue(strategy.isHealthy(), "precondition: healthy");
+
+        // Drain underlying out of the aToken contract (forge cheat — no
+        // real transfer, just balance adjustment) to model a fully
+        // deprecated reserve where the strategy can never pay anyone out.
+        deal(address(token), address(aToken), 0);
+
+        assertFalse(
+            strategy.isHealthy(),
+            "config flags OK but zero pool liquidity must report unhealthy"
+        );
+    }
+
+    // =========================================================================
     // Audit fix #25 (Oak 2026-04-24): constructor validates aToken pairing
     // =========================================================================
 
