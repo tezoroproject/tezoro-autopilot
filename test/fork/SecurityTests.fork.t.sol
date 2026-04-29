@@ -665,7 +665,7 @@ contract SecurityTests is BaseChainForkTest {
 
         vm.prank(keeper);
         vm.expectRevert(RewardsModuleV1_2.CannotSwapBaseAsset.selector);
-        rm.swap(router, token, token, 100, 0, hex"");
+        rm.swap(router, token, token, 100, 1, hex"");
     }
 
     /// @notice RewardsModuleV1_2: cannot rescue base asset
@@ -1239,7 +1239,7 @@ contract SecurityTests is BaseChainForkTest {
         // Try to swap base asset — should revert
         vm.prank(keeper);
         vm.expectRevert(RewardsModuleV1_2.CannotSwapBaseAsset.selector);
-        rm.swap(router, token, token, 100e6, 0, hex"");
+        rm.swap(router, token, token, 100e6, 1, hex"");
     }
 
     // =========================================================================
@@ -1634,7 +1634,7 @@ contract SecurityTests is BaseChainForkTest {
 
         vm.prank(keeper);
         vm.expectRevert(RewardsModuleV1_2.SwapCallFailed.selector);
-        rm.swap(router, compRewardToken, token, 1e18, 0, hex"");
+        rm.swap(router, compRewardToken, token, 1e18, 1, hex"");
     }
 
     // =========================================================================

@@ -680,7 +680,7 @@ contract RewardsModuleSecurityTest is Test {
 
         vm.prank(keeper);
         vm.expectRevert(RewardsModuleV1_2.IsPaused.selector);
-        module.swap(address(router), address(rwd), address(usdc), 1, 0, hex"");
+        module.swap(address(router), address(rwd), address(usdc), 1, 1, hex"");
     }
 
     function test_pause_blocksSweepToVault() public {
@@ -910,7 +910,7 @@ contract RewardsModuleFuzzTest is Test {
         // swap
         vm.prank(caller);
         vm.expectRevert(RewardsModuleV1_2.NotAdminOrKeeper.selector);
-        module.swap(address(router), address(rwd), address(usdc), 1, 0, hex"");
+        module.swap(address(router), address(rwd), address(usdc), 1, 1, hex"");
 
         // sweepToVault
         vm.prank(caller);
