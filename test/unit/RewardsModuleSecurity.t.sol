@@ -361,7 +361,7 @@ contract RewardsModuleSecurityTest is Test {
         vm.prank(keeper);
         vm.expectRevert(RewardsModuleV1_2.SwapCallFailed.selector);
         module.swap(
-            address(failRouter), address(rwd), address(usdc), 100e18, 0,
+            address(failRouter), address(rwd), address(usdc), 100e18, 1,
             abi.encodeCall(FailingRouter.doSwap, (address(rwd), 100e18))
         );
     }
@@ -628,10 +628,12 @@ contract RewardsModuleSecurityTest is Test {
         usdc.mint(address(router), 10e6);
         router.setUsdcOut(10e6);
 
-        // Even with 0 amountIn, the function should execute (router may still send output)
+        // Even with 0 amountIn, the function should execute (router may still
+        // send output). minAmountOut == 1 to clear the post audit-fix(28)
+        // zero-floor gate; the router still satisfies it by sending 10e6.
         vm.prank(keeper);
         module.swap(
-            address(router), address(rwd), address(usdc), 0, 0,
+            address(router), address(rwd), address(usdc), 0, 1,
             abi.encodeCall(MockDexRouter.doSwap, (address(rwd), 0))
         );
 
@@ -869,7 +871,7 @@ contract RewardsModuleFuzzTest is Test {
 
         vm.prank(keeper);
         module.swap(
-            address(router), address(rwd), address(usdc), amountIn, 0,
+            address(router), address(rwd), address(usdc), amountIn, 1,
             abi.encodeCall(MockDexRouter.doSwap, (address(rwd), amountIn))
         );
 

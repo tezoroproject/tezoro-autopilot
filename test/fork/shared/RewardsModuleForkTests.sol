@@ -340,7 +340,9 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         uint256 baseBalBefore = IERC20(token).balanceOf(address(rm));
 
         vm.prank(keeper);
-        rm.swap(uniswapRouter, compRewardToken, token, compAmount, 0, routerData);
+        // minAmountOut == 1 keeps the slippage check effectively permissive
+        // while satisfying the post audit-fix(28) zero-floor gate.
+        rm.swap(uniswapRouter, compRewardToken, token, compAmount, 1, routerData);
 
         uint256 baseBalAfter = IERC20(token).balanceOf(address(rm));
         assertGt(baseBalAfter, baseBalBefore, "Base asset balance should increase after swap");
@@ -540,7 +542,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         );
 
         vm.prank(keeper);
-        rm.swap(uniswapRouter, compRewardToken, token, compBalance, 0, routerData);
+        rm.swap(uniswapRouter, compRewardToken, token, compBalance, 1, routerData);
 
         uint256 swappedAmount = IERC20(token).balanceOf(address(rm));
         assertGt(swappedAmount, 0, "Should have base asset after swap");
@@ -586,7 +588,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
         uint256 baseBalBefore = IERC20(token).balanceOf(address(rm));
 
         vm.prank(keeper);
-        rm.swap(uniV2Router, compRewardToken, token, compAmount, 0, routerData);
+        rm.swap(uniV2Router, compRewardToken, token, compAmount, 1, routerData);
 
         uint256 baseBalAfter = IERC20(token).balanceOf(address(rm));
         assertGt(baseBalAfter, baseBalBefore, "Base asset balance should increase after V2 swap");

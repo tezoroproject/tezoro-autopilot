@@ -86,7 +86,9 @@ contract RewardsModuleHandler is Test {
         bytes memory data = abi.encodeCall(InvRouter.doSwap, (address(rwd), rwdAmount, usdcAmount));
 
         vm.prank(keeper);
-        module.swap(address(router), address(rwd), address(usdc), rwdAmount, 0, data);
+        // minAmountOut == 1 keeps slippage permissive while satisfying the
+        // post audit-fix(28) zero-floor gate.
+        module.swap(address(router), address(rwd), address(usdc), rwdAmount, 1, data);
 
         totalSwappedToModule += usdcAmount;
     }
