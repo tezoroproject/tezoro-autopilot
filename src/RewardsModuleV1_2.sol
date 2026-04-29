@@ -100,7 +100,7 @@ contract RewardsModuleV1_2 is ReentrancyGuard {
 
     /// @notice Selector for Morpho-style Universal Reward Distributor claims.
     ///         claim(address account, address reward, uint256 claimable, bytes32[] proof)
-    /// @dev Audit fix #10: typed wrapper claimMorphoUrd binds `account` to
+    /// @dev Typed wrapper claimMorphoUrd binds `account` to
     ///      address(this) on-chain, so the URD cannot redirect rewards even
     ///      if its calldata exposed a free recipient field.
     bytes4 public constant MORPHO_URD_CLAIM_SELECTOR =
@@ -108,7 +108,7 @@ contract RewardsModuleV1_2 is ReentrancyGuard {
 
     /// @notice Selector for Merkl-style distributor claims.
     ///         claim(address[] users, address[] tokens, uint256[] amounts, bytes32[][] proofs)
-    /// @dev Audit fix #10: typed wrapper claimMerkl binds every entry of
+    /// @dev Typed wrapper claimMerkl binds every entry of
     ///      `users` to address(this) on-chain.
     bytes4 public constant MERKL_CLAIM_SELECTOR =
         bytes4(keccak256("claim(address[],address[],uint256[],bytes32[][])"));
@@ -136,7 +136,7 @@ contract RewardsModuleV1_2 is ReentrancyGuard {
         emit ClaimExecuted(target, selector);
     }
 
-    /// @notice Audit fix #10: typed wrapper for Morpho-style URD claims.
+    /// @notice Typed wrapper for Morpho-style URD claims.
     ///         The `account` parameter (claim recipient) is hardcoded to
     ///         address(this); the URD cannot route the reward elsewhere even
     ///         if a future whitelist addition exposed a free recipient field.
@@ -163,7 +163,7 @@ contract RewardsModuleV1_2 is ReentrancyGuard {
         emit ClaimExecuted(urd, MORPHO_URD_CLAIM_SELECTOR);
     }
 
-    /// @notice Audit fix #10: typed wrapper for Merkl-style distributor claims.
+    /// @notice Typed wrapper for Merkl-style distributor claims.
     ///         Every entry of `users` is forced to address(this); the
     ///         distributor cannot route the reward elsewhere.
     function claimMerkl(

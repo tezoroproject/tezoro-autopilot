@@ -70,7 +70,7 @@ contract FluidStrategyV1_2 is IStrategy {
 
     function availableLiquidity() public view override returns (uint256) {
         // Fluid fTokens use a separate Liquidity layer -- assets are NOT held
-        // in the fToken contract. Use ERC-4626 maxWithdraw for accurate result.
+        // In the fToken contract. Use ERC-4626 maxWithdraw for accurate result.
         return fToken.maxWithdraw(address(this));
     }
 
@@ -83,7 +83,7 @@ contract FluidStrategyV1_2 is IStrategy {
     function harvest(address) external pure override returns (uint256) {
         // Fluid rewards handled externally (Merkl, etc.).
         // Claims are done via RewardsModuleV1_2.executeClaim(), tokens land here,
-        // then swept via sweepReward().
+        // Then swept via sweepReward().
         return 0;
     }
 

@@ -61,12 +61,9 @@ contract AaveV3StrategyV1_2 is IStrategy {
     }
 
     function emergencyWithdraw() external override onlyVault returns (uint256 withdrawn) {
-        // Audit fix #18: cap the request to current liquid reserves before
-        // calling pool.withdraw. Pre-fix, type(uint256).max asked Aave to
-        // pull the full aToken position, which reverts when reserve cash <
-        // position. removeStrategy / recallToIdle then treated a temporarily
-        // illiquid position as fully unrecoverable; the underlying tokens
-        // remained deposited and recoverable as soon as liquidity returned.
+        // Cap to current liquid reserves so a temporarily illiquid reserve
+        // doesn't make the whole emergency exit revert; the underlying
+        // remainder stays recoverable when liquidity returns.
         uint256 liquid = availableLiquidity();
         if (liquid == 0) return 0;
         withdrawn = pool.withdraw(asset, liquid, vault);
@@ -77,13 +74,10 @@ contract AaveV3StrategyV1_2 is IStrategy {
     }
 
     function availableLiquidity() public view override returns (uint256) {
-        // Audit fix #7: respect Aave reserve activity/pause flags.
-        // Reserve config bitmap: bit 56 = ACTIVE, bit 60 = PAUSED. A paused
-        // or inactive reserve cannot service withdrawals, so reporting any
-        // available liquidity would overstate maxWithdraw/maxRedeem at the
-        // vault level. (FROZEN — bit 57 — only blocks new deposits, so
-        // withdrawals can still proceed and that flag is intentionally not
-        // gated here.)
+        // Reserve config bitmap: bit 56 = ACTIVE, bit 60 = PAUSED. Inactive
+        // or paused reserves can't service withdrawals, so we report 0 to
+        // keep maxWithdraw/maxRedeem honest. FROZEN (bit 57) only blocks
+        // deposits, so withdrawals are still allowed there.
         uint256 config = pool.getConfiguration(asset);
         bool isActive = (config & (uint256(1) << 56)) != 0;
         bool isPaused = (config & (uint256(1) << 60)) != 0;
@@ -95,19 +89,16 @@ contract AaveV3StrategyV1_2 is IStrategy {
     }
 
     function isHealthy() external view override returns (bool) {
-        // Audit fix #8 (with #29): reflect Aave reserve flags. ACTIVE,
-        // !PAUSED, !FROZEN are required for the strategy to accept new
-        // deposits. The vault uses isHealthy as the deposit gate inside
-        // _rebalance, so a frozen reserve must report false to keep new
-        // capital from being routed into a dead-end. Withdrawals from a
-        // frozen-but-not-paused reserve still work; that path is unchanged.
+        // ACTIVE && !FROZEN && !PAUSED required: isHealthy gates new deposits
+        // in the vault rebalancer, so a frozen reserve must report false.
+        // Withdrawal-side health is unaffected (frozen reserves can still
+        // pay out).
         uint256 config = pool.getConfiguration(asset);
         bool isActive = (config & (uint256(1) << 56)) != 0;
         bool isFrozen = (config & (uint256(1) << 57)) != 0;
         bool isPaused = (config & (uint256(1) << 60)) != 0;
         if (!isActive || isFrozen || isPaused) return false;
 
-        // Check that the Aave pool has some liquidity for this asset
         uint256 poolLiquidity = IERC20(asset).balanceOf(address(aToken));
         return poolLiquidity > 0;
     }

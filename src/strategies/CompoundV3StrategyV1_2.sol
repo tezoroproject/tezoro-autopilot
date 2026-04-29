@@ -23,7 +23,7 @@ contract CompoundV3StrategyV1_2 is IStrategy {
     error NotVault();
     error ZeroAddress();
     error CannotSweepAsset();
-    /// @dev Audit fix #16: thrown by the constructor when the configured
+    /// @dev Thrown by the constructor when the configured
     ///      Comet's baseToken() does not match `asset_`. Prevents deploying
     ///      a strategy that would silently push funds into Comet's
     ///      collateral path instead of the base-supply path.
@@ -40,11 +40,11 @@ contract CompoundV3StrategyV1_2 is IStrategy {
         if (asset_ == address(0) || comet_ == address(0) || vault_ == address(0)) {
             revert ZeroAddress();
         }
-        // Audit fix #16: enforce that asset_ is Comet's base token. Without
-        // this check, a Comet that accepts asset_ as collateral instead would
-        // silently swallow deposits into the collateral position and the
-        // adapter's withdraw / balanceOf paths (which assume base-supply)
-        // would short-circuit, stranding funds.
+        // Enforce that asset_ is Comet's base token. Without
+        // This check, a Comet that accepts asset_ as collateral instead would
+        // Silently swallow deposits into the collateral position and the
+        // Adapter's withdraw / balanceOf paths (which assume base-supply)
+        // Would short-circuit, stranding funds.
         if (ICompoundV3Comet(comet_).baseToken() != asset_) revert BaseTokenMismatch();
 
         asset = asset_;
@@ -97,8 +97,8 @@ contract CompoundV3StrategyV1_2 is IStrategy {
     }
 
     function availableLiquidity() public view override returns (uint256) {
-        // Audit fix #7: respect Comet's withdraw pause flag so the vault's
-        // maxWithdraw/maxRedeem don't over-promise during a Compound pause.
+        // Respect Comet's withdraw pause flag so the vault's
+        // MaxWithdraw/maxRedeem don't over-promise during a Compound pause.
         if (comet.isWithdrawPaused()) return 0;
         uint256 ourBalance = comet.balanceOf(address(this));
         // Comet holds the base token directly -- check pool liquidity

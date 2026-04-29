@@ -26,7 +26,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     uint256 public constant MAX_PERFORMANCE_FEE_BPS = 3_000; // 30% cap
     uint256 public constant MAX_IDLE_BUFFER_BPS = 2_000; // 20% cap
     uint256 public constant MAX_FORCE_REDEEM_BATCH = 50;
-    /// @notice Audit fix #4 (Oak Major-4): maximum allowed gap between reconcile
+    /// @notice Maximum allowed gap between reconcile
     ///         calls before deposits/withdrawals revert with StaleNAV. Bounds the
     ///         stale-trackedBalance pricing window. Anyone can call reconcile()
     ///         (permissionless), so users can self-unblock if the keeper falls
@@ -65,7 +65,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     bool public paused;
     address public rewardsModule; // address(0) = disabled
     /// @notice Last block.timestamp at which reconcile() refreshed
-    ///         trackedBalance from live strategy reads. Audit fix #4.
+    ///         trackedBalance from live strategy reads.
     uint256 public lastReconcileTimestamp;
 
     // --- State: Timelock stub ---
@@ -114,8 +114,8 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     event RecallFailed(address indexed strategy, uint256 trackedAmount);
     // Removed by audit fix #5: removeStrategy now reverts with
     // StrategyNotFullyRecovered instead of emitting a "funds lost" notice
-    // and clearing accounting. Listeners that watched this event should
-    // monitor the StrategyNotFullyRecovered revert reason instead.
+    // And clearing accounting. Listeners that watched this event should
+    // Monitor the StrategyNotFullyRecovered revert reason instead.
     event ForceRedeemed(address indexed user, uint256 shares, uint256 assets);
 
     // --- Errors ---
@@ -146,21 +146,21 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     error TimelockNotReady();
     error TimelockAlreadyExecuted();
     error TimelockAlreadyPending();
-    /// @dev Audit fix #4: thrown by deposit/mint/withdraw/redeem when the cached
+    /// @dev Thrown by deposit/mint/withdraw/redeem when the cached
     ///      NAV used by share-pricing has not been refreshed within MAX_STALENESS.
     ///      Caller can call reconcile() (permissionless) to unblock.
     error StaleNAV();
-    /// @dev Audit fix #5: thrown by removeStrategy when emergencyWithdraw
+    /// @dev Thrown by removeStrategy when emergencyWithdraw
     ///      fails to recover the full tracked balance. Admin should call
     ///      recallToIdle or wait for liquidity before retrying.
     error StrategyNotFullyRecovered();
-    /// @dev Audit fix #6: thrown by deposit/mint when the resulting share
+    /// @dev Thrown by deposit/mint when the resulting share
     ///      mint would round to zero. Pre-fix, such interactions still
     ///      called _accruePerformanceFee, which would advance highWaterMark
     ///      against an undiluted share price and let later real gains skip
     ///      performance fees up to the inflated benchmark.
     error ZeroSharesMinted();
-    /// @dev Audit fix #15: thrown by setRewardsModule when the outgoing
+    /// @dev Thrown by setRewardsModule when the outgoing
     ///      module still holds base-asset rewards that have not been
     ///      swept. Caller must call old.sweepToVault() first.
     error RewardsModuleNotEmpty();
@@ -187,7 +187,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         _;
     }
 
-    /// @dev Audit fix #4: revert if the cached NAV is older than MAX_STALENESS.
+    /// @dev Revert if the cached NAV is older than MAX_STALENESS.
     ///      Applied to user-entry/exit functions so deposit/withdraw cannot price
     ///      against arbitrarily stale trackedBalance. reconcile() is permissionless,
     ///      so callers can refresh on demand if the keeper falls behind.
@@ -219,8 +219,8 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         idleBufferBps = idleBufferBps_;
         // HWM = initial share price so first collectFees() doesn't charge phantom perf fee
         highWaterMark = convertToAssets(10 ** decimals());
-        // Audit fix #4: start the staleness clock so the first MAX_STALENESS
-        // window doesn't immediately block depositors on a freshly deployed vault.
+        // Start the staleness clock so the first MAX_STALENESS
+        // Window doesn't immediately block depositors on a freshly deployed vault.
         lastReconcileTimestamp = block.timestamp;
     }
 
@@ -234,12 +234,12 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     ///         shares offset (_decimalsOffset) makes idle-donation attacks economically infeasible.
     function totalAssets() public view override returns (uint256) {
         uint256 total = IERC20(asset()).balanceOf(address(this));
-        // Audit fix #3: include base-asset rewards already swapped and parked
-        // in the RewardsModule. These are inbound to the vault via the
-        // module-only depositRewards() path, so they belong to existing
-        // shareholders and must be priced into shares before sweepToVault
-        // executes. Without this, deposits made between swap and sweep would
-        // capture prior yield.
+        // Include base-asset rewards already swapped and parked
+        // In the RewardsModule. These are inbound to the vault via the
+        // Module-only depositRewards() path, so they belong to existing
+        // Shareholders and must be priced into shares before sweepToVault
+        // Executes. Without this, deposits made between swap and sweep would
+        // Capture prior yield.
         if (rewardsModule != address(0)) {
             total += IERC20(asset()).balanceOf(rewardsModule);
         }
@@ -260,11 +260,11 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function maxDeposit(address) public view override returns (uint256) {
         if (paused) return 0;
         if (depositCap == 0) return type(uint256).max;
-        // Audit fix #11: use live strategy balances for cap enforcement so a
-        // depositor cannot slip through while trackedBalance is stale (a
-        // window bounded but not eliminated by audit-fix(4)). totalAssets()
-        // is still used for share-pricing; only the cap check sees live
-        // values.
+        // Use live strategy balances for cap enforcement so a
+        // Depositor cannot slip through while trackedBalance is stale (a
+        // Window bounded but not eliminated by audit-fix(4)). totalAssets()
+        // Is still used for share-pricing; only the cap check sees live
+        // Values.
         uint256 total = _liveTotalAssets();
         if (total >= depositCap) return 0;
         return depositCap - total;
@@ -278,7 +278,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         return previewDeposit(depositCap - total);
     }
 
-    /// @dev Audit fix #11: live aggregation used only for cap enforcement.
+    /// @dev Live aggregation used only for cap enforcement.
     ///      Falls back to trackedBalance when a strategy's balanceOf reverts
     ///      (broken strategy) so the cap remains computable. Donation-attack
     ///      defence is preserved because the share-pricing path still uses
@@ -299,7 +299,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         }
     }
 
-    /// @dev maxWithdraw/maxRedeem account for pending performance fee dilution so that
+    /// @dev MaxWithdraw/maxRedeem account for pending performance fee dilution so that
     ///      withdraw(maxWithdraw(x)) and redeem(maxRedeem(x)) never revert (ERC-4626 compliance).
     ///      Without this, _accruePerformanceFee() inside withdraw/redeem mints fee shares that
     ///      dilute the caller, making the pre-accrual maxWithdraw/maxRedeem values too optimistic.
@@ -326,7 +326,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         return available.mulDiv(adjustedSupply, total, Math.Rounding.Floor);
     }
 
-    /// @dev previewDeposit/previewMint account for pending performance fee shares so that
+    /// @dev PreviewDeposit/previewMint account for pending performance fee shares so that
     ///      previewDeposit(x) == deposit(x) after deposit() accrues fees first (ERC-4626 compliance).
     ///      Without this, previewDeposit would not include the pending fee shares that are minted
     ///      at the start of deposit(), causing preview to be optimistic (returns too many shares).
@@ -366,8 +366,8 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         address receiver
     ) public override nonReentrant whenNotPaused whenFresh returns (uint256) {
         _accruePerformanceFee();
-        // Audit fix #6: reject deposits that would mint zero shares so they
-        // cannot quietly bump highWaterMark or strand the depositor's assets.
+        // Reject deposits that would mint zero shares so they
+        // Cannot quietly bump highWaterMark or strand the depositor's assets.
         if (previewDeposit(assets) == 0) revert ZeroSharesMinted();
         return super.deposit(assets, receiver);
     }
@@ -376,7 +376,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         uint256 shares,
         address receiver
     ) public override nonReentrant whenNotPaused whenFresh returns (uint256) {
-        // Audit fix #6 (mirror): reject mint(0).
+        // Reject mint(0).
         if (shares == 0) revert ZeroSharesMinted();
         _accruePerformanceFee();
         return super.mint(shares, receiver);
@@ -415,11 +415,11 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         _burn(owner, shares);
 
         uint256 totalWithdrawn = _executeWithdrawal(receiver, assets);
-        // Audit fix #1: reuse forceRedeem's dust tolerance (per-strategy rounding
+        // Reuse forceRedeem's dust tolerance (per-strategy rounding
         // OR 1 bps of the asset amount, whichever is larger) so a normal user
-        // withdrawal is not blocked when one or more underlying protocols return
-        // slightly less than requested due to rounding. Larger shortfalls (e.g.,
-        // undisclosed exit fees) still revert.
+        // Withdrawal is not blocked when one or more underlying protocols return
+        // Slightly less than requested due to rounding. Larger shortfalls (e.g.,
+        // Undisclosed exit fees) still revert.
         if (totalWithdrawn + _dustTolerance(assets) < assets) revert WithdrawalFailed();
         emit Withdraw(caller, receiver, owner, totalWithdrawn, shares);
     }
@@ -446,26 +446,26 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         if (!isActiveStrategy[strategy]) revert StrategyNotActive();
         _consumeTimelockIfActive(keccak256(abi.encode("removeStrategy", address(strategy))));
 
-        // Audit fix #34: refresh tracked from a live read first, so the
-        // recovery threshold below compares the recovered amount against
-        // reality (yield + principal) rather than a stale snapshot.
+        // Refresh tracked from a live read first, so the
+        // Recovery threshold below compares the recovered amount against
+        // Reality (yield + principal) rather than a stale snapshot.
         // Without this, a strategy with unreconciled yield could pass
         // \"recovered >= tracked\" while quietly leaking the unreconciled
-        // portion.
+        // Portion.
         try strategy.balanceOf() returns (uint256 live) {
             trackedBalance[strategy] = live;
         } catch {
-            // broken strategy — keep stale tracked
+            // Broken strategy — keep stale tracked
         }
 
-        // Audit fix #5: emergencyWithdraw must fully recover the tracked
-        // balance before we drop the strategy from accounting. If the
-        // underlying market is illiquid or the strategy is broken, this
-        // call reverts (or returns less than tracked), and pre-fix the
-        // vault still zeroed trackedBalance and removed the strategy —
-        // understating totalAssets and underpricing shares for everyone
-        // remaining. Post-fix the strategy stays active; admin must call
-        // recallToIdle or wait for liquidity, then retry.
+        // EmergencyWithdraw must fully recover the tracked
+        // Balance before we drop the strategy from accounting. If the
+        // Underlying market is illiquid or the strategy is broken, this
+        // Call reverts (or returns less than tracked), and pre-fix the
+        // Vault still zeroed trackedBalance and removed the strategy —
+        // Understating totalAssets and underpricing shares for everyone
+        // Remaining. Post-fix the strategy stays active; admin must call
+        // RecallToIdle or wait for liquidity, then retry.
         uint256 tracked = trackedBalance[strategy];
         uint256 balBefore = IERC20(asset()).balanceOf(address(this));
         try strategy.emergencyWithdraw() {} catch {}
@@ -495,9 +495,9 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function pauseStrategy(IStrategy strategy) external onlyGuardianOrAdmin {
         if (!isActiveStrategy[strategy]) revert StrategyNotActive();
         pausedStrategies[strategy] = true;
-        // Audit fix #17: revoke the strategy's spend allowance on pause so
-        // a compromised or misbehaving paused strategy cannot pull idle
-        // vault funds via its still-live ERC20 allowance.
+        // Revoke the strategy's spend allowance on pause so
+        // A compromised or misbehaving paused strategy cannot pull idle
+        // Vault funds via its still-live ERC20 allowance.
         IERC20(asset()).forceApprove(address(strategy), 0);
         emit StrategyPaused(address(strategy));
     }
@@ -505,8 +505,8 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function unpauseStrategy(IStrategy strategy) external onlyAdmin {
         if (!isActiveStrategy[strategy]) revert StrategyNotActive();
         pausedStrategies[strategy] = false;
-        // Audit fix #17: restore the spend allowance only when the strategy
-        // is intentionally unpaused (mirrors the addStrategy approval path).
+        // Restore the spend allowance only when the strategy
+        // Is intentionally unpaused (mirrors the addStrategy approval path).
         IERC20(asset()).forceApprove(address(strategy), type(uint256).max);
         emit StrategyUnpaused(address(strategy));
     }
@@ -534,13 +534,13 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function recallToIdle(IStrategy strategy) external onlyAdmin nonReentrant {
         if (!isActiveStrategy[strategy]) revert StrategyNotActive();
 
-        // Audit fix #34: refresh tracked from a live read so the recall
-        // request reflects unreconciled yield (which would otherwise stay
-        // behind in the strategy and silently dilute remaining LPs).
+        // Refresh tracked from a live read so the recall
+        // Request reflects unreconciled yield (which would otherwise stay
+        // Behind in the strategy and silently dilute remaining LPs).
         try strategy.balanceOf() returns (uint256 live) {
             trackedBalance[strategy] = live;
         } catch {
-            // broken strategy — keep stale tracked balance
+            // Broken strategy — keep stale tracked balance
         }
 
         uint256 tracked = trackedBalance[strategy];
@@ -556,8 +556,8 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
 
             if (withdrawn > 0) {
                 if (withdrawn > trackedBalance[strategy]) {
-                    // Audit fix #2 (parallel location): refresh live balance
-                    // instead of zeroing.
+                    // Refresh live balance
+                    // Instead of zeroing.
                     try strategy.balanceOf() returns (uint256 liveBalance) {
                         trackedBalance[strategy] = liveBalance;
                     } catch {
@@ -582,9 +582,9 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             emit StrategyDepositFrozen(address(strategy));
         }
 
-        // Audit fix #19: revoke the strategy's spend allowance during recall
-        // so a faulty/compromised strategy cannot pull idle vault funds via
-        // its still-live ERC20 allowance after we have signalled distress.
+        // Revoke the strategy's spend allowance during recall
+        // So a faulty/compromised strategy cannot pull idle vault funds via
+        // Its still-live ERC20 allowance after we have signalled distress.
         // Approval is re-granted only if admin re-enables the strategy
         // (unfreezeStrategyDeposits below).
         IERC20(asset()).forceApprove(address(strategy), 0);
@@ -605,8 +605,8 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
 
         uint256 totalWithdrawn = _executeWithdrawal(user, assets);
         // Allow rounding dust: per-strategy rounding (2 wei each) OR 1 bps of assets,
-        // whichever is larger. Some protocols (Morpho share math, Aave ray math) can
-        // produce rounding errors beyond 2 wei per strategy.
+        // Whichever is larger. Some protocols (Morpho share math, Aave ray math) can
+        // Produce rounding errors beyond 2 wei per strategy.
         uint256 dustTolerance = _dustTolerance(assets);
         if (totalWithdrawn + dustTolerance < assets) revert WithdrawalFailed();
         emit Withdraw(msg.sender, user, user, totalWithdrawn, shares);
@@ -704,13 +704,13 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             IStrategy strategy = strategies[i];
             if (pausedStrategies[strategy]) continue;
 
-            // Audit fix #12: read isHealthy but DO NOT skip the strategy here.
+            // Read isHealthy but DO NOT skip the strategy here.
             // Pre-fix, `continue` skipped both branches below — including the
-            // withdrawal branch, so an unhealthy strategy held funds even
-            // when the keeper was trying to de-risk by lowering its target.
+            // Withdrawal branch, so an unhealthy strategy held funds even
+            // When the keeper was trying to de-risk by lowering its target.
             // Post-fix: isHealthy gates only the deposit branch (no new
-            // capital into a broken venue); the withdraw branch runs
-            // unconditionally so liquidity that exists can still be pulled.
+            // Capital into a broken venue); the withdraw branch runs
+            // Unconditionally so liquidity that exists can still be pulled.
             // Broken strategy that reverts on isHealthy is treated as unhealthy.
             bool healthy;
             try strategy.isHealthy() returns (bool h) {
@@ -757,9 +757,9 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
                 if (maxDeviationBps > 0 && toWithdraw.mulDiv(BPS, total) < maxDeviationBps) continue;
 
                 try strategy.withdraw(toWithdraw) returns (uint256 withdrawn) {
-                    // Audit fix #2 (parallel location): refresh live balance instead of zeroing.
+                    // Refresh live balance instead of zeroing.
                     // Same defect class as the user-withdrawal path: stale tracked +
-                    // overdelivery used to hide unreconciled yield.
+                    // Overdelivery used to hide unreconciled yield.
                     if (withdrawn > trackedBalance[strategy]) {
                         try strategy.balanceOf() returns (uint256 liveBalance) {
                             trackedBalance[strategy] = liveBalance;
@@ -780,7 +780,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     }
 
     /// @notice Reconcile internal accounting with actual strategy balances.
-    ///         Recognizes accrued yield. Audit fix #4: permissionless — anyone
+    ///         Recognizes accrued yield. permissionless — anyone
     ///         can call to refresh the staleness clock. Broken strategies are
     ///         skipped (tracked balance unchanged) so a single broken strategy
     ///         cannot block reconciliation of healthy strategies.
@@ -795,10 +795,10 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             try strategy.balanceOf() returns (uint256 balance) {
                 trackedBalance[strategy] = balance;
             } catch {
-                // broken strategy — keep stale tracked balance, don't block reconcile
+                // Broken strategy — keep stale tracked balance, don't block reconcile
             }
         }
-        // Audit fix #4: bump staleness clock so deposit/withdraw can proceed.
+        // Bump staleness clock so deposit/withdraw can proceed.
         lastReconcileTimestamp = block.timestamp;
         emit Reconciled();
     }
@@ -815,7 +815,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             try strategy.harvest(rewardsModule) returns (uint256 harvested) {
                 totalHarvested += harvested;
             } catch {
-                // broken strategy — skip, don't block harvest of other strategies
+                // Broken strategy — skip, don't block harvest of other strategies
             }
         }
 
@@ -897,10 +897,10 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
 
     function setRewardsModule(address newModule) external onlyAdmin {
         _consumeTimelockIfActive(keccak256(abi.encode("setRewardsModule", newModule)));
-        // Audit fix #15: refuse rotation if the outgoing module still holds
-        // base asset. Without this gate the leftover would strand —
-        // sweepToVault on the old module reverts (msg.sender no longer
-        // matches rewardsModule) and rescueToken refuses the base asset.
+        // Refuse rotation if the outgoing module still holds
+        // Base asset. Without this gate the leftover would strand —
+        // SweepToVault on the old module reverts (msg.sender no longer
+        // Matches rewardsModule) and rescueToken refuses the base asset.
         if (rewardsModule != address(0) && IERC20(asset()).balanceOf(rewardsModule) > 0) {
             revert RewardsModuleNotEmpty();
         }
@@ -914,18 +914,18 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         if (newBps > performanceFeeBps) {
             _consumeTimelockIfActive(keccak256(abi.encode("setPerformanceFee", newBps)));
         }
-        // Audit fix #13: refresh trackedBalance from live strategy reads
+        // Refresh trackedBalance from live strategy reads
         // BEFORE accruing the fee. Pre-fix, _accruePerformanceFee saw only
-        // the cached NAV, so yield earned but not yet reconciled became
-        // visible (and taxable) only after the fee change — and was then
-        // charged at the new rate.
+        // The cached NAV, so yield earned but not yet reconciled became
+        // Visible (and taxable) only after the fee change — and was then
+        // Charged at the new rate.
         _refreshTrackedBalances();
         _accruePerformanceFee();
         emit PerformanceFeeUpdated(performanceFeeBps, newBps);
         performanceFeeBps = newBps;
     }
 
-    /// @dev Audit fix #13 helper: best-effort live read of every active
+    /// @dev best-effort live read of every active
     ///      strategy into trackedBalance. Mirrors reconcile()'s loop body
     ///      without triggering _accruePerformanceFee or bumping the staleness
     ///      timestamp (the caller controls fee accrual order).
@@ -936,7 +936,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             try strategy.balanceOf() returns (uint256 balance) {
                 trackedBalance[strategy] = balance;
             } catch {
-                // broken strategy — keep stale tracked balance, don't block
+                // Broken strategy — keep stale tracked balance, don't block
             }
         }
     }
@@ -1122,17 +1122,17 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             IStrategy strategy = strategies[i];
             if (pausedStrategies[strategy]) continue;
 
-            // try-catch: broken strategy cannot block withdrawals
+            // Try-catch: broken strategy cannot block withdrawals
             try strategy.availableLiquidity() returns (uint256 available) {
                 if (available == 0) continue;
 
                 uint256 toWithdraw = remaining > available ? available : remaining;
                 try strategy.withdraw(toWithdraw) returns (uint256 withdrawn) {
                     if (withdrawn > trackedBalance[strategy]) {
-                        // Audit fix #2: refresh live balance instead of zeroing.
+                        // Refresh live balance instead of zeroing.
                         // Pre-fix, zeroing trackedBalance hid unreconciled yield
-                        // still held by the strategy, letting later depositors
-                        // enter at a stale (cheap) price until the next reconcile.
+                        // Still held by the strategy, letting later depositors
+                        // Enter at a stale (cheap) price until the next reconcile.
                         try strategy.balanceOf() returns (uint256 liveBalance) {
                             trackedBalance[strategy] = liveBalance;
                         } catch {
@@ -1142,14 +1142,14 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
                         trackedBalance[strategy] -= withdrawn;
                     }
 
-                    // Audit fix #9: if a strategy reports `available` liquidity
-                    // but actually delivers less, the gap is a child-vault
-                    // haircut / exit loss — not a normal liquidity shortage.
+                    // If a strategy reports `available` liquidity
+                    // But actually delivers less, the gap is a child-vault
+                    // Haircut / exit loss — not a normal liquidity shortage.
                     // Do NOT continue the waterfall to top up from healthy
-                    // strategies; that would silently socialise the loss to
-                    // remaining LPs. Stop here so the deficit is charged to
-                    // the current withdrawer (and either absorbed by the
-                    // dust tolerance or surfaced via WithdrawalFailed).
+                    // Strategies; that would silently socialise the loss to
+                    // Remaining LPs. Stop here so the deficit is charged to
+                    // The current withdrawer (and either absorbed by the
+                    // Dust tolerance or surfaced via WithdrawalFailed).
                     if (withdrawn < toWithdraw) {
                         remaining = remaining > withdrawn ? remaining - withdrawn : 0;
                         break;
@@ -1183,7 +1183,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             try strategy.availableLiquidity() returns (uint256 stratAvail) {
                 available += stratAvail > 2 ? stratAvail - 2 : 0;
             } catch {
-                // broken strategy — skip, don't block view functions
+                // Broken strategy — skip, don't block view functions
             }
         }
     }
@@ -1228,11 +1228,11 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         uint256 totalShares = totalSupply();
         fee = gain.mulDiv(totalShares, oneShare).mulDiv(performanceFeeBps, BPS);
 
-        // Audit fix #6: only advance HWM when we actually mint fee shares.
+        // Only advance HWM when we actually mint fee shares.
         // Pre-fix, sub-rounding gains (e.g., 1 wei donations or single-wei
-        // deposits) bumped HWM without paying fees, so a later genuine gain
-        // measured against the inflated benchmark went untaxed until share
-        // price climbed back over it.
+        // Deposits) bumped HWM without paying fees, so a later genuine gain
+        // Measured against the inflated benchmark went untaxed until share
+        // Price climbed back over it.
         if (fee == 0) return 0;
 
         uint256 feeShares = convertToShares(fee);

@@ -198,10 +198,10 @@ contract ERC4626MultiStrategyV1_2 is IStrategy, ReentrancyGuard {
 
         uint256 len = _subVaults.length;
         for (uint256 i = 0; i < len; i++) {
-            // Audit fix #14: isolate each sub-vault read so a single
-            // reverting child cannot break the aggregate. Reverting child
-            // contributes 0 here; the parent vault's reconcile path will
-            // not advance trackedBalance with a polluted aggregate.
+            // Isolate each sub-vault read so a single
+            // Reverting child cannot break the aggregate. Reverting child
+            // Contributes 0 here; the parent vault's reconcile path will
+            // Not advance trackedBalance with a polluted aggregate.
             IERC4626 sv = IERC4626(_subVaults[i]);
             try sv.balanceOf(address(this)) returns (uint256 shares) {
                 if (shares > 0) {
@@ -218,9 +218,9 @@ contract ERC4626MultiStrategyV1_2 is IStrategy, ReentrancyGuard {
 
         uint256 len = _subVaults.length;
         for (uint256 i = 0; i < len; i++) {
-            // Audit fix #14: best-effort per-sub-vault read. A reverting
-            // child reports 0 instead of bricking maxWithdraw/maxRedeem on
-            // the parent vault.
+            // Best-effort per-sub-vault read. A reverting
+            // Child reports 0 instead of bricking maxWithdraw/maxRedeem on
+            // The parent vault.
             try IERC4626(_subVaults[i]).maxWithdraw(address(this)) returns (uint256 maxW) {
                 total += maxW;
             } catch {}
