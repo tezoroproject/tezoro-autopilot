@@ -76,7 +76,7 @@ abstract contract BaseChainForkTest is RewardsModuleForkTests {
     }
 
     function test_guardian_pauseStrategy_skipsInRebalance() public {
-        if (address(aaveStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(aaveStrategy)), "aave");
 
         address guardian = makeAddr("guardian");
         vm.prank(admin);
@@ -171,7 +171,7 @@ abstract contract BaseChainForkTest is RewardsModuleForkTests {
     }
 
     function test_caps_rebalance_clamps_to_cap() public {
-        if (address(aaveStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(aaveStrategy)), "aave");
         if (strategyCount < 2) return;
 
         // Set all strategies' allocations: aave=2000, distribute rest among others
