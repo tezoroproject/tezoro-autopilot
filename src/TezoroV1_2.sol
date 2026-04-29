@@ -160,6 +160,10 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     ///      against an undiluted share price and let later real gains skip
     ///      performance fees up to the inflated benchmark.
     error ZeroSharesMinted();
+    /// @dev Audit fix #15: thrown by setRewardsModule when the outgoing
+    ///      module still holds base-asset rewards that have not been
+    ///      swept. Caller must call old.sweepToVault() first.
+    error RewardsModuleNotEmpty();
 
     // --- Modifiers ---
 
@@ -852,6 +856,13 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
 
     function setRewardsModule(address newModule) external onlyAdmin {
         _consumeTimelockIfActive(keccak256(abi.encode("setRewardsModule", newModule)));
+        // Audit fix #15: refuse rotation if the outgoing module still holds
+        // base asset. Without this gate the leftover would strand —
+        // sweepToVault on the old module reverts (msg.sender no longer
+        // matches rewardsModule) and rescueToken refuses the base asset.
+        if (rewardsModule != address(0) && IERC20(asset()).balanceOf(rewardsModule) > 0) {
+            revert RewardsModuleNotEmpty();
+        }
         emit RewardsModuleUpdated(rewardsModule, newModule);
         rewardsModule = newModule;
     }
