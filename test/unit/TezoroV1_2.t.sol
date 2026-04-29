@@ -2515,4 +2515,51 @@ contract TezoroV1_2Test is Test {
         assertEq(vault.lastReconcileTimestamp(), block.timestamp);
         assertGt(vault.lastReconcileTimestamp(), before);
     }
+
+    // =========================================================================
+    // Audit fix #6 (Oak 2026-04-24): tiny interactions cannot raise HWM
+    // =========================================================================
+
+    /// @notice Sub-rounding gains (donation of 1 wei) no longer bump HWM.
+    ///         Pre-fix, the donation increased totalAssets by 1 wei, the
+    ///         share price ticked up, _accruePerformanceFee advanced HWM but
+    ///         minted no fee, and a later genuine gain went untaxed up to
+    ///         the inflated benchmark.
+    function test_auditFix6_dustDonationDoesNotMoveHwm() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        uint256 hwmBefore = vault.highWaterMark();
+
+        // 1 wei donation: increases totalAssets but does not produce a
+        // measurable fee mint.
+        token.mint(address(vault), 1);
+
+        // Trigger _accruePerformanceFee via collectFees.
+        vm.prank(admin);
+        vault.collectFees();
+
+        assertEq(vault.highWaterMark(), hwmBefore, "HWM must not advance on a dust gain");
+    }
+
+    /// @notice Deposits that would round to zero shares revert. The path
+    ///         existed pre-fix and was the easiest way to trigger the
+    ///         "HWM advances without fee" sequence.
+    function test_auditFix6_zeroShareDepositReverts() public {
+        // Seed the vault so virtual offset doesn't dominate; smallest deposit
+        // that still mints zero shares would be 0 assets.
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        vm.prank(alice);
+        vm.expectRevert(TezoroV1_2.ZeroSharesMinted.selector);
+        vault.deposit(0, alice);
+    }
+
+    /// @notice mint(0) reverts symmetrically.
+    function test_auditFix6_zeroMintReverts() public {
+        vm.prank(alice);
+        vm.expectRevert(TezoroV1_2.ZeroSharesMinted.selector);
+        vault.mint(0, alice);
+    }
 }
