@@ -91,6 +91,18 @@ contract AaveV3StrategyV1_2 is IStrategy {
     }
 
     function isHealthy() external view override returns (bool) {
+        // Audit fix #8 (with #29): reflect Aave reserve flags. ACTIVE,
+        // !PAUSED, !FROZEN are required for the strategy to accept new
+        // deposits. The vault uses isHealthy as the deposit gate inside
+        // _rebalance, so a frozen reserve must report false to keep new
+        // capital from being routed into a dead-end. Withdrawals from a
+        // frozen-but-not-paused reserve still work; that path is unchanged.
+        uint256 config = pool.getConfiguration(asset);
+        bool isActive = (config & (uint256(1) << 56)) != 0;
+        bool isFrozen = (config & (uint256(1) << 57)) != 0;
+        bool isPaused = (config & (uint256(1) << 60)) != 0;
+        if (!isActive || isFrozen || isPaused) return false;
+
         // Check that the Aave pool has some liquidity for this asset
         uint256 poolLiquidity = IERC20(asset).balanceOf(address(aToken));
         return poolLiquidity > 0;
