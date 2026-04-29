@@ -355,15 +355,16 @@ contract SecurityTests is BaseChainForkTest {
         vm.stopPrank();
     }
 
-    /// @notice Verify keeper-only functions revert for random users
+    /// @notice Verify keeper-only functions revert for random users.
+    ///         Note: reconcile() is permissionless post audit-fix(4) — users
+    ///         must be able to bump the staleness clock themselves so the
+    ///         vault doesn't lock when the keeper falls behind. It is
+    ///         intentionally NOT included here.
     function test_security_accessControl_keeperFunctions() public {
         vm.startPrank(alice);
 
         vm.expectRevert(TezoroV1_2.NotAdminOrKeeper.selector);
         vault.rebalance();
-
-        vm.expectRevert(TezoroV1_2.NotAdminOrKeeper.selector);
-        vault.reconcile();
 
         vm.expectRevert(TezoroV1_2.NotAdminOrKeeper.selector);
         vault.harvestAll();
@@ -677,7 +678,12 @@ contract SecurityTests is BaseChainForkTest {
         rm.rescueToken(token, admin, 100e6);
     }
 
-    /// @notice RewardsModuleV1_2: sweepToVault properly sends to vault
+    /// @notice RewardsModuleV1_2: sweepToVault properly sends to vault.
+    ///         Post audit-fix(3) totalAssets already includes the rm's
+    ///         base-asset balance (so a depositor can't slip in between
+    ///         swap-land and sweep-land at a stale-cheap NAV). The sweep
+    ///         therefore moves funds without changing totalAssets — the
+    ///         delta is in the physical token balances, not in NAV.
     function test_security_rm_sweepToVault_goesToVault() public {
         RewardsModuleV1_2 rm = new RewardsModuleV1_2(address(vault), admin);
 
@@ -686,7 +692,6 @@ contract SecurityTests is BaseChainForkTest {
         rm.setKeeper(keeper);
         vm.stopPrank();
 
-        // Deposit so vault has shares
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
 
@@ -694,11 +699,18 @@ contract SecurityTests is BaseChainForkTest {
         deal(token, address(rm), rewardAmount);
 
         uint256 vaultTotalBefore = vault.totalAssets();
+        uint256 vaultIdleBefore = IERC20(token).balanceOf(address(vault));
+
         vm.prank(keeper);
         rm.sweepToVault();
 
-        assertEq(vault.totalAssets(), vaultTotalBefore + rewardAmount, "Vault should receive rewards");
-        assertEq(IERC20(token).balanceOf(address(rm)), 0, "RM should be empty");
+        assertEq(vault.totalAssets(), vaultTotalBefore, "totalAssets unchanged: rm balance was already counted");
+        assertEq(
+            IERC20(token).balanceOf(address(vault)),
+            vaultIdleBefore + rewardAmount,
+            "vault idle should grow by the swept amount"
+        );
+        assertEq(IERC20(token).balanceOf(address(rm)), 0, "rm should be empty");
     }
 
     // =========================================================================
@@ -749,11 +761,15 @@ contract SecurityTests is BaseChainForkTest {
     // Edge Case: Zero-amount operations
     // =========================================================================
 
-    /// @notice Zero deposit should not create shares
+    /// @notice Zero deposit must revert with ZeroSharesMinted (audit-fix(6)).
+    ///         Pre-fix the call silently returned 0 shares; that path
+    ///         advanced the high-water mark without minting fee shares,
+    ///         which a later genuine gain could then under-tax. Post-fix
+    ///         the call reverts so the misuse cannot reach the HWM update.
     function test_security_zeroDeposit() public {
         vm.prank(alice);
-        uint256 shares = vault.deposit(0, alice);
-        assertEq(shares, 0, "Zero deposit should mint 0 shares");
+        vm.expectRevert(TezoroV1_2.ZeroSharesMinted.selector);
+        vault.deposit(0, alice);
     }
 
     /// @notice Zero redeem should not transfer assets
@@ -1058,7 +1074,19 @@ contract SecurityTests is BaseChainForkTest {
     // Additional Edge Cases: Fee Manipulation & Share Price
     // =========================================================================
 
-    /// @notice Verify depositRewards increases totalAssets but does NOT mint shares
+    /// @notice Verify depositRewards does NOT mint shares to its caller
+    ///         (the rm itself), and increases share price for existing
+    ///         shareholders.
+    ///
+    ///         Note on audit-fix(3): totalAssets now includes the rm's
+    ///         base-asset balance from the moment the rm receives it, so
+    ///         share price climbs at the deal step rather than at the
+    ///         transfer step. depositRewards then fires _accruePerformanceFee
+    ///         on the already-elevated NAV, which CAN mint fee shares to
+    ///         feeRecipient — that is a fee accrual, not a depositor mint.
+    ///         The invariant we still enforce is "rm receives no vault
+    ///         shares from this path" and "share price is monotonically
+    ///         non-decreasing."
     function test_security_depositRewards_noShareMint() public {
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
@@ -1067,9 +1095,8 @@ contract SecurityTests is BaseChainForkTest {
         vm.prank(admin);
         vault.setRewardsModule(rm);
 
-        uint256 supplyBefore = vault.totalSupply();
-        uint256 totalBefore = vault.totalAssets();
         uint256 sharePriceBefore = vault.convertToAssets(10 ** vault.decimals());
+        uint256 rmSharesBefore = vault.balanceOf(rm);
 
         uint256 rewardAmount = depositAmount / 100;
         deal(token, rm, rewardAmount);
@@ -1078,9 +1105,12 @@ contract SecurityTests is BaseChainForkTest {
         vault.depositRewards(rewardAmount);
         vm.stopPrank();
 
-        assertEq(vault.totalSupply(), supplyBefore, "No shares should be minted");
-        assertEq(vault.totalAssets(), totalBefore + rewardAmount, "totalAssets should increase");
-        assertGt(vault.convertToAssets(10 ** vault.decimals()), sharePriceBefore, "Share price should increase");
+        assertEq(vault.balanceOf(rm), rmSharesBefore, "rm must not receive shares from depositRewards");
+        assertGe(
+            vault.convertToAssets(10 ** vault.decimals()),
+            sharePriceBefore,
+            "share price must be non-decreasing"
+        );
     }
 
     /// @notice Verify that multiple fee collections don't compound incorrectly
@@ -1216,9 +1246,13 @@ contract SecurityTests is BaseChainForkTest {
     // N-1 Fix: removeStrategy resilient to broken strategy
     // =========================================================================
 
-    /// @notice removeStrategy succeeds even when emergencyWithdraw() reverts
+    /// @notice removeStrategy refuses to drop a broken strategy that still
+    ///         has tracked funds (audit-fix(5) safety: don't silently wipe
+    ///         accounting for assets that have not returned to the vault).
+    ///         Pre-fix the call would have succeeded with recovered=0,
+    ///         leaking the position into the broken strategy permanently.
     function test_security_removeStrategy_brokenStrategy() public {
-        if (address(aaveStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(aaveStrategy)), "aave");
 
         // Deposit and rebalance so Aave strategy has funds
         vm.prank(alice);
@@ -1229,20 +1263,41 @@ contract SecurityTests is BaseChainForkTest {
         uint256 aaveTracked = vault.trackedBalance(IStrategy(address(aaveStrategy)));
         assertGt(aaveTracked, 0, "Aave should have tracked balance");
 
-        uint256 stratCountBefore = vault.strategiesCount();
-
-        // Break the Aave strategy — emergencyWithdraw will revert
+        // Break the Aave strategy — every call (including balanceOf and
+        // emergencyWithdraw) reverts. tracked refresh and emergency exit
+        // both fail, so recovered=0 < tracked → StrategyNotFullyRecovered.
         vm.etch(address(aaveStrategy), hex"60006000FD");
 
-        // removeStrategy should NOT revert despite broken emergencyWithdraw
+        vm.prank(admin);
+        vm.expectRevert(TezoroV1_2.StrategyNotFullyRecovered.selector);
+        vault.removeStrategy(IStrategy(address(aaveStrategy)));
+    }
+
+    /// @notice removeStrategy succeeds when the strategy has been emptied
+    ///         first (recallToIdle drains the position; remaining tracked is
+    ///         within the recovery threshold). Demonstrates the post-fix
+    ///         operational pattern for retiring distressed strategies.
+    function test_security_removeStrategy_afterRecallToIdle() public {
+        _skipIfStrategyUnhealthy(IStrategy(address(aaveStrategy)), "aave");
+
+        vm.prank(alice);
+        vault.deposit(depositAmount, alice);
+        vm.prank(keeper);
+        vault.rebalance();
+
+        // Drain the position back to vault idle.
+        vm.prank(admin);
+        vault.recallToIdle(IStrategy(address(aaveStrategy)));
+
+        uint256 stratCountBefore = vault.strategiesCount();
+
         vm.prank(admin);
         vault.removeStrategy(IStrategy(address(aaveStrategy)));
 
-        // Verify cleanup happened
-        assertEq(vault.strategiesCount(), stratCountBefore - 1, "Strategy should be removed from array");
-        assertFalse(vault.isActiveStrategy(IStrategy(address(aaveStrategy))), "Should not be active");
-        assertEq(vault.trackedBalance(IStrategy(address(aaveStrategy))), 0, "Tracked balance should be 0");
-        assertEq(vault.targetAllocationBps(IStrategy(address(aaveStrategy))), 0, "Target should be 0");
+        assertEq(vault.strategiesCount(), stratCountBefore - 1);
+        assertFalse(vault.isActiveStrategy(IStrategy(address(aaveStrategy))));
+        assertEq(vault.trackedBalance(IStrategy(address(aaveStrategy))), 0);
+        assertEq(vault.targetAllocationBps(IStrategy(address(aaveStrategy))), 0);
     }
 
     /// @notice removeStrategy with a healthy strategy still withdraws funds first

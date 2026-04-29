@@ -145,12 +145,13 @@ contract ComplianceTests is BaseChainForkTest {
         vault.mint(1e12, alice);
     }
 
-    /// @notice mint(0) should be a no-op
+    /// @notice mint(0) must revert with ZeroSharesMinted (audit-fix(6)).
+    ///         Symmetric with deposit(0): the no-op path silently advanced HWM
+    ///         pre-fix, under-taxing later genuine gains.
     function test_mint_zero() public {
         vm.prank(alice);
-        uint256 assets = vault.mint(0, alice);
-        assertEq(assets, 0, "Minting 0 shares should cost 0 assets");
-        assertEq(vault.balanceOf(alice), 0, "Should have 0 shares");
+        vm.expectRevert(TezoroV1_2.ZeroSharesMinted.selector);
+        vault.mint(0, alice);
     }
 
     // =========================================================================

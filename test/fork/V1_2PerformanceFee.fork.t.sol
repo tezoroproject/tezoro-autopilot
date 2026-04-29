@@ -149,12 +149,27 @@ contract V1_2PerformanceFee is Test {
         uint256 aliceShares = vault.balanceOf(alice);
         assertGt(aliceShares, 0, string.concat(label, ": alice should have shares"));
 
+        // Post audit-fix(6): maxRedeem now accounts for both pending fee
+        // dilution and available liquidity, so a full-position exit can be
+        // capped below total shares for vaults whose strategies hold
+        // partially-illiquid positions (Morpho markets, etc.). Redeem only
+        // what's currently exitable and verify the per-share recovery beats
+        // the original deposit-time share price.
+        uint256 redeemable = vault.maxRedeem(alice);
+        assertGt(redeemable, 0, string.concat(label, ": some shares should be redeemable"));
+
         vm.startPrank(alice);
-        uint256 redeemed = vault.redeem(aliceShares, alice, alice);
+        uint256 redeemed = vault.redeem(redeemable, alice, alice);
         vm.stopPrank();
 
-        assertGt(redeemed, DEPOSIT, string.concat(label, ": alice should profit after redeem"));
-        assertEq(vault.balanceOf(alice), 0, string.concat(label, ": alice should have 0 shares"));
+        // Pro-rata: she redeemed `redeemable` of `aliceShares` shares.
+        // If share price grew, `redeemed * aliceShares / redeemable` > DEPOSIT.
+        uint256 impliedFullValue = (redeemed * aliceShares) / redeemable;
+        assertGt(
+            impliedFullValue,
+            DEPOSIT,
+            string.concat(label, ": share price must have grown (pro-rated value > deposit)")
+        );
     }
 
     /// @dev Try to call accrueAllInterest() on each strategy.
