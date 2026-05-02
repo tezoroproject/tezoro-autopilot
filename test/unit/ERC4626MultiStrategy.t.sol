@@ -625,6 +625,92 @@ contract ERC4626MultiStrategyTest is Test {
     }
 
     // =========================================================================
+    // Sub-vault allowance revoked on freeze/recall, restored on unfreeze
+    // =========================================================================
+
+    /// @notice freezeSubVaultDeposits must revoke the asset allowance the
+    ///         strategy granted on addSubVault. Without revocation, the
+    ///         freeze flag only blocks the strategy's own allocate() path;
+    ///         a frozen-but-compromised child could still call transferFrom
+    ///         and pull idle balances that accumulate later (fresh deposits,
+    ///         recalled positions from other children).
+    function test_freezeRevokesSubVaultAllowance() public {
+        assertEq(
+            token.allowance(address(strategy), address(subVaultA)),
+            type(uint256).max,
+            "precondition: addSubVault granted approval"
+        );
+
+        vm.prank(adminAddr);
+        strategy.freezeSubVaultDeposits(address(subVaultA));
+
+        assertEq(
+            token.allowance(address(strategy), address(subVaultA)),
+            0,
+            "freeze must revoke allowance"
+        );
+    }
+
+    /// @notice recallSubVault must revoke the allowance after pulling shares
+    ///         back to idle. A recalled child has been operationally flagged
+    ///         as distressed and must not retain a live pull.
+    function test_recallRevokesSubVaultAllowance() public {
+        _fundVaultAndApprove(500e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(500e6);
+
+        vm.prank(keeperAddr);
+        strategy.allocate(address(subVaultA), 200e6);
+
+        assertEq(token.allowance(address(strategy), address(subVaultA)), type(uint256).max);
+
+        vm.prank(adminAddr);
+        strategy.recallSubVault(address(subVaultA));
+
+        assertEq(
+            token.allowance(address(strategy), address(subVaultA)),
+            0,
+            "recall must revoke allowance"
+        );
+    }
+
+    /// @notice unfreezeSubVaultDeposits must restore the allowance the
+    ///         freeze revoked, mirroring addSubVault. Without restoration,
+    ///         a legitimate post-incident re-enable would leave the child
+    ///         unable to receive deposits via the next allocate call.
+    function test_unfreezeRestoresSubVaultAllowance() public {
+        vm.prank(adminAddr);
+        strategy.freezeSubVaultDeposits(address(subVaultA));
+        assertEq(token.allowance(address(strategy), address(subVaultA)), 0);
+
+        vm.prank(adminAddr);
+        strategy.unfreezeSubVaultDeposits(address(subVaultA));
+
+        assertEq(
+            token.allowance(address(strategy), address(subVaultA)),
+            type(uint256).max,
+            "unfreeze must restore allowance"
+        );
+    }
+
+    /// @notice After freeze, the child cannot pull idle assets even if it
+    ///         tries. The allowance is the binding contract; with it revoked,
+    ///         transferFrom reverts.
+    function test_frozenChildCannotPullIdle() public {
+        _fundVaultAndApprove(500e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(500e6);
+
+        vm.prank(adminAddr);
+        strategy.freezeSubVaultDeposits(address(subVaultA));
+
+        // The sub-vault impersonates a malicious pull on idle.
+        vm.prank(address(subVaultA));
+        vm.expectRevert();
+        IERC20(address(token)).transferFrom(address(strategy), address(subVaultA), 1);
+    }
+
+    // =========================================================================
     // Per-sub-vault read isolation
     // =========================================================================
 
