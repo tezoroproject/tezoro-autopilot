@@ -1939,7 +1939,9 @@ contract TezoroV1_2Test is Test {
         vm.prank(admin);
         vault.forceRedeem(alice);
 
-        // Deposit again so we can re-propose
+        // Deposit again so we can re-propose (bump staleness
+        // clock since 1 day > MAX_STALENESS).
+        vault.reconcile();
         vm.prank(alice);
         vault.deposit(DEPOSIT, alice);
 
@@ -2493,5 +2495,57 @@ contract TezoroV1_2Test is Test {
         // Post-fix: rewards in the module raise totalAssets, so the same
         // deposit mints strictly fewer shares — no cheap entry.
         assertLt(sharesAfter, sharesBefore, "depositor in reward window must not mint stale-priced shares");
+    }
+
+    // =========================================================================
+    // MAX_STALENESS + permissionless reconcile
+    // =========================================================================
+
+    /// @notice Deposit reverts with StaleNAV once the cached NAV is older than
+    ///         MAX_STALENESS, bounding the stale-trackedBalance pricing window.
+    function test_depositRevertsWhenStale() public {
+        vm.warp(block.timestamp + vault.MAX_STALENESS() + 1);
+
+        vm.prank(alice);
+        vm.expectRevert(TezoroV1_2.StaleNAV.selector);
+        vault.deposit(DEPOSIT, alice);
+    }
+
+    /// @notice Withdraw is gated by the same freshness check.
+    function test_withdrawRevertsWhenStale() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        vm.warp(block.timestamp + vault.MAX_STALENESS() + 1);
+
+        vm.prank(alice);
+        vm.expectRevert(TezoroV1_2.StaleNAV.selector);
+        vault.withdraw(1e6, alice, alice);
+    }
+
+    /// @notice Anyone can call reconcile() to refresh the staleness clock —
+    ///         users self-unblock if the keeper falls behind.
+    function test_reconcileIsPermissionless() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        vm.warp(block.timestamp + vault.MAX_STALENESS() + 1);
+
+        // Random EOA — not admin, not keeper.
+        vm.prank(nobody);
+        vault.reconcile();
+
+        // Now deposit succeeds.
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+    }
+
+    /// @notice reconcile bumps lastReconcileTimestamp.
+    function test_reconcileBumpsTimestamp() public {
+        uint256 before = vault.lastReconcileTimestamp();
+        vm.warp(block.timestamp + 30 minutes);
+        vault.reconcile();
+        assertEq(vault.lastReconcileTimestamp(), block.timestamp);
+        assertGt(vault.lastReconcileTimestamp(), before);
     }
 }

@@ -26,6 +26,12 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     uint256 public constant MAX_PERFORMANCE_FEE_BPS = 3_000; // 30% cap
     uint256 public constant MAX_IDLE_BUFFER_BPS = 2_000; // 20% cap
     uint256 public constant MAX_FORCE_REDEEM_BATCH = 50;
+    /// @notice Maximum allowed gap between reconcile
+    ///         calls before deposits/withdrawals revert with StaleNAV. Bounds the
+    ///         stale-trackedBalance pricing window. Anyone can call reconcile()
+    ///         (permissionless), so users can self-unblock if the keeper falls
+    ///         behind.
+    uint256 public constant MAX_STALENESS = 1 hours;
 
     // --- Immutables ---
 
@@ -58,6 +64,9 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     address public guardian; // can pause, cannot unpause
     bool public paused;
     address public rewardsModule; // address(0) = disabled
+    /// @notice Last block.timestamp at which reconcile() refreshed
+    ///         trackedBalance from live strategy reads.
+    uint256 public lastReconcileTimestamp;
 
     // --- State: Timelock stub ---
 
@@ -134,6 +143,10 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     error TimelockNotReady();
     error TimelockAlreadyExecuted();
     error TimelockAlreadyPending();
+    /// @dev Thrown by deposit/mint/withdraw/redeem when the cached
+    ///      NAV used by share-pricing has not been refreshed within MAX_STALENESS.
+    ///      Caller can call reconcile() (permissionless) to unblock.
+    error StaleNAV();
     /// @dev Thrown by setRewardsModule when the caller attempts to
     ///      rotate an existing rewards module while timelockDelay == 0.
     ///      First-time setup (rewardsModule == address(0)) is exempt.
@@ -166,6 +179,15 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         _;
     }
 
+    /// @dev Revert if the cached NAV is older than MAX_STALENESS.
+    ///      Applied to user-entry/exit functions so deposit/withdraw cannot price
+    ///      against arbitrarily stale trackedBalance. reconcile() is permissionless,
+    ///      so callers can refresh on demand if the keeper falls behind.
+    modifier whenFresh() {
+        if (block.timestamp - lastReconcileTimestamp > MAX_STALENESS) revert StaleNAV();
+        _;
+    }
+
     // --- Constructor ---
 
     constructor(
@@ -189,6 +211,9 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         idleBufferBps = idleBufferBps_;
         // HWM = initial share price so first collectFees() doesn't charge phantom perf fee
         highWaterMark = convertToAssets(10 ** decimals());
+        // Start the staleness clock so the first MAX_STALENESS
+        // Window doesn't immediately block depositors on a freshly deployed vault.
+        lastReconcileTimestamp = block.timestamp;
     }
 
     // =========================================================================
@@ -305,7 +330,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function deposit(
         uint256 assets,
         address receiver
-    ) public override nonReentrant whenNotPaused returns (uint256) {
+    ) public override nonReentrant whenNotPaused whenFresh returns (uint256) {
         _accruePerformanceFee();
         return super.deposit(assets, receiver);
     }
@@ -313,7 +338,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function mint(
         uint256 shares,
         address receiver
-    ) public override nonReentrant whenNotPaused returns (uint256) {
+    ) public override nonReentrant whenNotPaused whenFresh returns (uint256) {
         _accruePerformanceFee();
         return super.mint(shares, receiver);
     }
@@ -322,7 +347,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         uint256 assets,
         address receiver,
         address owner
-    ) public override nonReentrant returns (uint256) {
+    ) public override nonReentrant whenFresh returns (uint256) {
         _accruePerformanceFee();
         return super.withdraw(assets, receiver, owner);
     }
@@ -331,7 +356,7 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         uint256 shares,
         address receiver,
         address owner
-    ) public override nonReentrant returns (uint256) {
+    ) public override nonReentrant whenFresh returns (uint256) {
         _accruePerformanceFee();
         return super.redeem(shares, receiver, owner);
     }
@@ -664,10 +689,11 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     }
 
     /// @notice Reconcile internal accounting with actual strategy balances.
-    ///         Recognizes accrued yield. Called by keeper or admin.
-    ///         Broken strategies are skipped (tracked balance unchanged) so a single
-    ///         broken strategy cannot block reconciliation of healthy strategies.
-    function reconcile() external onlyAdminOrKeeper nonReentrant {
+    ///         Recognizes accrued yield. permissionless — anyone
+    ///         can call to refresh the staleness clock. Broken strategies are
+    ///         skipped (tracked balance unchanged) so a single broken strategy
+    ///         cannot block reconciliation of healthy strategies.
+    function reconcile() external nonReentrant {
         // Accrue fee at old share price before recognizing new yield.
         // Prevents MEV sandwich: deposit -> reconcile -> withdraw.
         _accruePerformanceFee();
@@ -678,9 +704,11 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             try strategy.balanceOf() returns (uint256 balance) {
                 trackedBalance[strategy] = balance;
             } catch {
-                // broken strategy — keep stale tracked balance, don't block reconcile
+                // Broken strategy — keep stale tracked balance, don't block reconcile
             }
         }
+        // Bump staleness clock so deposit/withdraw can proceed.
+        lastReconcileTimestamp = block.timestamp;
         emit Reconciled();
     }
 

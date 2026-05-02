@@ -755,8 +755,10 @@ contract DepositFreezeTest is Test {
         vm.warp(block.timestamp + 1 days + 1);
         vault.forceRedeem(alice);
 
-        // Alice deposits again
+        // Alice deposits again (refresh staleness clock first
+        // since 1 day > MAX_STALENESS).
         vm.stopPrank();
+        vault.reconcile();
         token.mint(alice, 5_000e6);
         vm.prank(alice);
         vault.deposit(5_000e6, alice);
