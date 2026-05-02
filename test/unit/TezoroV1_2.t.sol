@@ -2039,10 +2039,10 @@ contract TezoroV1_2Test is Test {
     }
 
     // =========================================================================
-    // Fix 7: removeStrategy fund loss event
+    // RemoveStrategy reverts on incomplete emergency exit
     // =========================================================================
 
-    function test_removeStrategy_emitsFundsLost_whenWithdrawFails() public {
+    function test_removeStrategy_revertsWhenWithdrawFails() public {
         vm.prank(alice);
         vault.deposit(DEPOSIT, alice);
 
@@ -2058,13 +2058,18 @@ contract TezoroV1_2Test is Test {
         uint256 tracked = vault.trackedBalance(IStrategy(address(strategyA)));
         assertGt(tracked, 0);
 
-        // Break the strategy so emergencyWithdraw fails
+        // Break the strategy so emergencyWithdraw fails — pre-fix this still
+        // dropped the strategy and zeroed accounting; post-fix it reverts so
+        // the position stays visible until liquidity returns.
         strategyA.setFullyBroken(true);
 
         vm.prank(admin);
-        vm.expectEmit(true, false, false, true);
-        emit TezoroV1_2.StrategyRemovalFundsLost(address(strategyA), tracked);
+        vm.expectRevert(TezoroV1_2.StrategyNotFullyRecovered.selector);
         vault.removeStrategy(IStrategy(address(strategyA)));
+
+        // Strategy is still active and accounting is preserved.
+        assertTrue(vault.isActiveStrategy(IStrategy(address(strategyA))));
+        assertEq(vault.trackedBalance(IStrategy(address(strategyA))), tracked);
     }
 
     function test_removeStrategy_noFundsLost_whenWithdrawSucceeds() public {
