@@ -88,7 +88,16 @@ contract AaveV3StrategyV1_2 is IStrategy {
     }
 
     function isHealthy() external view override returns (bool) {
-        // Check that the Aave pool has some liquidity for this asset
+        // ACTIVE && !FROZEN && !PAUSED required: isHealthy gates new deposits
+        // in the vault rebalancer, so a frozen reserve must report false.
+        // Withdrawal-side health is unaffected (frozen reserves can still
+        // pay out).
+        uint256 config = pool.getConfiguration(asset);
+        bool isActive = (config & (uint256(1) << 56)) != 0;
+        bool isFrozen = (config & (uint256(1) << 57)) != 0;
+        bool isPaused = (config & (uint256(1) << 60)) != 0;
+        if (!isActive || isFrozen || isPaused) return false;
+
         uint256 poolLiquidity = IERC20(asset).balanceOf(address(aToken));
         return poolLiquidity > 0;
     }
