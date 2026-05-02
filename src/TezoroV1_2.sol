@@ -1056,6 +1056,19 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
                         trackedBalance[strategy] -= withdrawn;
                     }
 
+                    // If a strategy reports `available` liquidity
+                    // But actually delivers less, the gap is a child-vault
+                    // Haircut / exit loss — not a normal liquidity shortage.
+                    // Do NOT continue the waterfall to top up from healthy
+                    // Strategies; that would silently socialise the loss to
+                    // Remaining LPs. Stop here so the deficit is charged to
+                    // The current withdrawer (and either absorbed by the
+                    // Dust tolerance or surfaced via WithdrawalFailed).
+                    if (withdrawn < toWithdraw) {
+                        remaining = remaining > withdrawn ? remaining - withdrawn : 0;
+                        break;
+                    }
+
                     // Saturating subtraction: strategy may return slightly more than requested due to rounding
                     remaining = withdrawn >= remaining ? 0 : remaining - withdrawn;
                 } catch {
