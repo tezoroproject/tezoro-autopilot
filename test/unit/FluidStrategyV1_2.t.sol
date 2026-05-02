@@ -30,11 +30,16 @@ contract MockUSDC is ERC20 {
 // requested share amount would exceed it.
 contract MockFToken is ERC4626 {
     uint256 public liquidityLayerCap = type(uint256).max;
+    bool public depositsPaused;
 
     constructor(IERC20 asset_) ERC4626(asset_) ERC20("Fluid USDC", "fUSDC") {}
 
     function setLiquidityLayerCap(uint256 cap) external {
         liquidityLayerCap = cap;
+    }
+
+    function setDepositsPaused(bool p) external {
+        depositsPaused = p;
     }
 
     function maxRedeem(address owner) public view override returns (uint256) {
@@ -44,6 +49,12 @@ contract MockFToken is ERC4626 {
 
     function maxWithdraw(address owner) public view override returns (uint256) {
         return convertToAssets(maxRedeem(owner));
+    }
+
+    /// @dev Real Fluid fTokens return 0 from maxDeposit when the pool is
+    ///      paused / capacity-exhausted / deprecated. Models that knob.
+    function maxDeposit(address) public view override returns (uint256) {
+        return depositsPaused ? 0 : type(uint256).max;
     }
 
     function redeem(uint256 shares, address receiver, address owner) public override returns (uint256) {
@@ -157,5 +168,43 @@ contract FluidStrategyV1_2Test is Test {
         // Reuse the existing fToken — its asset() == address(token).
         FluidStrategyV1_2 ok = new FluidStrategyV1_2(address(token), address(fToken), vaultAddr);
         assertEq(ok.asset(), address(token));
+    }
+
+    // =========================================================================
+    // IsHealthy uses depositability quote
+    // =========================================================================
+
+    /// @notice Pre-fix isHealthy returned `fToken.totalAssets() > 0` — global
+    ///         market non-emptiness, an unrelated proxy. A paused-or-
+    ///         deprecated market with third-party deposits still reported
+    ///         healthy and continued attracting fresh allocations; a fresh
+    ///         empty market reported unhealthy and never received its
+    ///         initial allocation. Post-fix uses fToken.maxDeposit which
+    ///         mirrors the gate the next deposit() call would actually hit.
+    function test_isHealthyFalseWhenDepositsPaused() public {
+        assertTrue(strategy.isHealthy(), "precondition: healthy");
+
+        fToken.setDepositsPaused(true);
+
+        assertFalse(
+            strategy.isHealthy(),
+            "deposit-paused fToken must be unhealthy regardless of totalAssets"
+        );
+    }
+
+    /// @notice Empty market with positive maxDeposit must report healthy —
+    ///         pre-fix the totalAssets() == 0 check incorrectly classified
+    ///         fresh markets as unhealthy and they never received their
+    ///         initial allocation.
+    function test_isHealthyTrueOnEmptyButDepositableMarket() public {
+        // Fresh fToken with no deposits, no pause.
+        MockFToken empty = new MockFToken(IERC20(address(token)));
+        FluidStrategyV1_2 freshStrat = new FluidStrategyV1_2(address(token), address(empty), vaultAddr);
+
+        assertEq(empty.totalAssets(), 0, "precondition: fToken empty");
+        assertTrue(
+            freshStrat.isHealthy(),
+            "fresh-but-depositable market must report healthy"
+        );
     }
 }
