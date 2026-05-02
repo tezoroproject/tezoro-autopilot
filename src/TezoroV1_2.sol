@@ -466,17 +466,12 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         if (!isActiveStrategy[strategy]) revert StrategyNotActive();
         _consumeTimelockIfActive(keccak256(abi.encode("removeStrategy", address(strategy))));
 
-        // Refresh tracked from a live read first, so the
-        // Recovery threshold below compares the recovered amount against
-        // Reality (yield + principal) rather than a stale snapshot.
-        // Without this, a strategy with unreconciled yield could pass
-        // \"recovered >= tracked\" while quietly leaking the unreconciled
-        // Portion.
-        try strategy.balanceOf() returns (uint256 live) {
-            trackedBalance[strategy] = live;
-        } catch {
-            // Broken strategy — keep stale tracked
-        }
+        // Refresh tracked from a live read first, so the recovery
+        // threshold below compares the recovered amount against reality
+        // (yield + principal) rather than a stale snapshot. Without this,
+        // a strategy with unreconciled yield could pass "recovered >=
+        // tracked" while quietly leaking the unreconciled portion.
+        _refreshTrackedBalance(strategy);
 
         // EmergencyWithdraw must fully recover the tracked
         // Balance before we drop the strategy from accounting. If the
@@ -554,14 +549,10 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     function recallToIdle(IStrategy strategy) external onlyAdmin nonReentrant {
         if (!isActiveStrategy[strategy]) revert StrategyNotActive();
 
-        // Refresh tracked from a live read so the recall
-        // Request reflects unreconciled yield (which would otherwise stay
-        // Behind in the strategy and silently dilute remaining LPs).
-        try strategy.balanceOf() returns (uint256 live) {
-            trackedBalance[strategy] = live;
-        } catch {
-            // Broken strategy — keep stale tracked balance
-        }
+        // Refresh tracked from a live read so the recall request reflects
+        // unreconciled yield (which would otherwise stay behind in the
+        // strategy and silently dilute remaining LPs).
+        _refreshTrackedBalance(strategy);
 
         uint256 tracked = trackedBalance[strategy];
         if (tracked > 0) {
@@ -962,19 +953,27 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         performanceFeeBps = newBps;
     }
 
-    /// @dev best-effort live read of every active
-    ///      strategy into trackedBalance. Mirrors reconcile()'s loop body
-    ///      without triggering _accruePerformanceFee or bumping the staleness
+    /// @dev best-effort live read for a single strategy. Skips paused
+    ///      strategies. Catches any revert from the strategy's balanceOf()
+    ///      so a broken adapter cannot block the caller (which is typically
+    ///      an admin-lifecycle path that must finish even if one strategy
+    ///      is misbehaving).
+    function _refreshTrackedBalance(IStrategy strategy) internal {
+        if (pausedStrategies[strategy]) return;
+        try strategy.balanceOf() returns (uint256 balance) {
+            trackedBalance[strategy] = balance;
+        } catch {
+            // Broken strategy — keep stale tracked balance, don't block
+        }
+    }
+
+    /// @dev best-effort live read of every active strategy into
+    ///      trackedBalance. Mirrors reconcile()'s loop body without
+    ///      triggering _accruePerformanceFee or bumping the staleness
     ///      timestamp (the caller controls fee accrual order).
     function _refreshTrackedBalances() internal {
         for (uint256 i = 0; i < strategies.length; i++) {
-            IStrategy strategy = strategies[i];
-            if (pausedStrategies[strategy]) continue;
-            try strategy.balanceOf() returns (uint256 balance) {
-                trackedBalance[strategy] = balance;
-            } catch {
-                // Broken strategy — keep stale tracked balance, don't block
-            }
+            _refreshTrackedBalance(strategies[i]);
         }
     }
 
