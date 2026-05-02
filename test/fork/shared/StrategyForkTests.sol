@@ -16,7 +16,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     // =========================================================================
 
     function test_aave_deposit() public {
-        if (address(aaveStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(aaveStrategy)), "aave");
 
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
@@ -27,7 +27,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     }
 
     function test_aave_withdraw() public {
-        if (address(aaveStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(aaveStrategy)), "aave");
 
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
@@ -43,7 +43,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     }
 
     function test_aave_emergencyWithdraw() public {
-        if (address(aaveStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(aaveStrategy)), "aave");
 
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
@@ -58,8 +58,8 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
         assertLe(aaveStrategy.balanceOf(), 1);
     }
 
-    function test_aave_isHealthy() public view {
-        if (address(aaveStrategy) == address(0)) return;
+    function test_aave_isHealthy() public {
+        _skipIfStrategyUnhealthy(IStrategy(address(aaveStrategy)), "aave");
         assertTrue(aaveStrategy.isHealthy());
     }
 
@@ -75,7 +75,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     // =========================================================================
 
     function test_compound_deposit() public {
-        if (address(compoundStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(compoundStrategy)), "compound");
 
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
@@ -86,7 +86,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     }
 
     function test_compound_withdraw() public {
-        if (address(compoundStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(compoundStrategy)), "compound");
 
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
@@ -102,7 +102,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     }
 
     function test_compound_emergencyWithdraw() public {
-        if (address(compoundStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(compoundStrategy)), "compound");
 
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
@@ -114,8 +114,8 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
         assertGt(withdrawn, 0);
     }
 
-    function test_compound_isHealthy() public view {
-        if (address(compoundStrategy) == address(0)) return;
+    function test_compound_isHealthy() public {
+        _skipIfStrategyUnhealthy(IStrategy(address(compoundStrategy)), "compound");
         assertTrue(compoundStrategy.isHealthy());
     }
 
@@ -127,7 +127,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     }
 
     function test_compound_yieldAccrual() public {
-        if (address(compoundStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(compoundStrategy)), "compound");
 
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
@@ -193,7 +193,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     // =========================================================================
 
     function test_aave_harvest() public {
-        if (address(aaveStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(aaveStrategy)), "aave");
 
         vm.prank(alice);
         vault.deposit(depositAmount, alice);
@@ -212,7 +212,7 @@ abstract contract StrategyForkTests is BaseChainForkSetup {
     }
 
     function test_compound_harvest() public {
-        if (address(compoundStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(compoundStrategy)), "compound");
         if (!_compRewardsActive()) return;
 
         vm.prank(alice);

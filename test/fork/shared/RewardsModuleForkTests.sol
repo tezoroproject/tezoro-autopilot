@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {RewardsModuleV1_2} from "../../../src/RewardsModuleV1_2.sol";
+import {IStrategy} from "../../../src/interfaces/IStrategy.sol";
 import {VaultForkTests} from "./VaultForkTests.sol";
 
 /// @dev Minimal Uniswap V3 SwapRouter interface for fork swap tests
@@ -109,7 +110,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
 
     /// @notice Full rewards pipeline: deposit -> rebalance -> time -> harvest -> sweep -> verify
     function test_rewardsModule_fullPipeline() public {
-        if (address(compoundStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(compoundStrategy)), "compound");
         if (!_compRewardsActive()) return;
 
         // 1. Deploy RewardsModuleV1_2 and configure
@@ -493,7 +494,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     function test_rewardsModule_fullPipeline_withRealSwap() public {
         if (uniswapRouter == address(0)) return;
         if (swapPath.length == 0) return;
-        if (address(compoundStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(compoundStrategy)), "compound");
         if (!_compRewardsActive()) return;
 
         // 1. Deploy and configure RewardsModuleV1_2
@@ -683,7 +684,7 @@ abstract contract RewardsModuleForkTests is VaultForkTests {
     function test_rewardsModule_fullPipeline_withUniswapV2() public {
         if (uniV2Router == address(0)) return;
         if (wrappedNative == address(0)) return;
-        if (address(compoundStrategy) == address(0)) return;
+        _skipIfStrategyUnhealthy(IStrategy(address(compoundStrategy)), "compound");
         if (!_compRewardsActive()) return;
 
         // 1. Deploy and configure RewardsModuleV1_2

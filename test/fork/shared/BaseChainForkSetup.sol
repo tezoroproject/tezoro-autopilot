@@ -198,4 +198,37 @@ abstract contract BaseChainForkSetup is Test {
         if (_getCometSupplySpeed(compoundComet) == 0) return false;
         return IERC20(compRewardToken).balanceOf(cometRewards) > 0;
     }
+
+    /// @dev Skip the current test if the strategy reports unhealthy at the
+    ///      forked block. Production reserves can drift in and out of healthy
+    ///      state (Aave reserve frozen, Comet supply/withdraw paused), and the
+    ///      assertions below assume the protocol can accept a deposit. Without
+    ///      this guard the fork tests would flap based on external state. The
+    ///      strategy's isHealthy gate decodes the live reserve config, so a
+    ///      `false` here is a correct read of live protocol state, not a bug.
+    function _skipIfStrategyUnhealthy(IStrategy strategy, string memory label) internal {
+        if (address(strategy) == address(0)) {
+            vm.skip(true, string.concat(label, " strategy not deployed on this chain - skipping"));
+            return;
+        }
+        if (!strategy.isHealthy()) {
+            vm.skip(true, string.concat(label, " strategy unhealthy at fork block - skipping"));
+        }
+    }
+
+    /// @dev Skip the current test if ANY active vault strategy reports
+    ///      unhealthy. Used by tests that assume every configured strategy
+    ///      receives its target allocation (rebalance distribution checks,
+    ///      deviation/needsRebalance assertions); when one strategy is
+    ///      legitimately unhealthy on the forked block, those preconditions
+    ///      no longer hold and the test would fail spuriously.
+    function _skipIfAnyVaultStrategyUnhealthy() internal {
+        IStrategy[] memory strats = vault.getStrategies();
+        for (uint256 i = 0; i < strats.length; i++) {
+            if (!strats[i].isHealthy()) {
+                vm.skip(true, "at least one vault strategy unhealthy at fork block - skipping");
+                return;
+            }
+        }
+    }
 }

@@ -241,13 +241,19 @@ contract ERC4626MultiIntegrationTest is Test {
 
     // ====== Emergency remove strategy ======
 
-    function test_emergencyRemoveStrategy() public {
+    function test_emergencyRecallToIdle() public {
+        // removeStrategy reverts with StrategyNotFullyRecovered when
+        // emergencyWithdraw cannot fully match the live tracked balance.
+        // For sub-allocating strategies (Morpho multi, ERC4626 multi)
+        // per-market share/asset rounding leaves a few wei behind, so the
+        // operator-safe escape is recallToIdle: drain everything that
+        // liquidly comes back, freeze deposits, and leave the
+        // strategy in the active list until any rounding remainder settles.
         vm.prank(alice);
         vault.deposit(DEPOSIT, alice);
         vm.prank(keeper);
         vault.rebalance();
 
-        // Sub-allocate
         uint256 idle = IERC20(USDC).balanceOf(address(multiStrategy));
         vm.startPrank(keeper);
         multiStrategy.allocate(STEAKHOUSE_USDC, idle / 2);
@@ -256,17 +262,14 @@ contract ERC4626MultiIntegrationTest is Test {
 
         uint256 vaultBalBefore = IERC20(USDC).balanceOf(address(vault));
 
-        // Admin removes strategy -- triggers emergencyWithdraw cascading through sub-vaults
         vm.prank(admin);
-        vault.removeStrategy(IStrategy(address(multiStrategy)));
+        vault.recallToIdle(IStrategy(address(multiStrategy)));
 
-        // All funds should be back in vault
         uint256 vaultBalAfter = IERC20(USDC).balanceOf(address(vault));
         assertGt(vaultBalAfter, vaultBalBefore, "Funds should return to vault");
-
-        // Strategy should be empty
-        assertEq(multiStrategy.balanceOf(), 0, "Strategy should be drained");
-        assertEq(IERC20(USDC).balanceOf(address(multiStrategy)), 0, "No idle left in strategy");
+        // Strategy is frozen for new deposits but still in the active set
+        // until the rounding remainder is fully reconciled and removed.
+        assertTrue(vault.depositFrozenStrategies(IStrategy(address(multiStrategy))));
     }
 
     // ====== Multiple users fairness ======
@@ -703,7 +706,10 @@ contract MorphoBlueMultiIntegrationTest is Test {
 
     // ====== Emergency remove ======
 
-    function test_emergencyRemoveStrategy() public {
+    function test_emergencyRecallToIdle() public {
+        // See ERC4626MultiIntegrationTest.test_emergencyRecallToIdle for why
+        // recallToIdle is the correct exit primitive for sub-allocating
+        // strategies.
         vm.prank(alice);
         vault.deposit(DEPOSIT, alice);
         vm.prank(keeper);
@@ -718,11 +724,11 @@ contract MorphoBlueMultiIntegrationTest is Test {
         uint256 vaultBalBefore = IERC20(USDC).balanceOf(address(vault));
 
         vm.prank(admin);
-        vault.removeStrategy(IStrategy(address(multiStrategy)));
+        vault.recallToIdle(IStrategy(address(multiStrategy)));
 
         uint256 vaultBalAfter = IERC20(USDC).balanceOf(address(vault));
         assertGt(vaultBalAfter, vaultBalBefore, "Funds should return to vault");
-        assertEq(multiStrategy.balanceOf(), 0, "Strategy should be drained");
+        assertTrue(vault.depositFrozenStrategies(IStrategy(address(multiStrategy))));
     }
 
     // ====== Multiple users fairness ======
