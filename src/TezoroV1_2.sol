@@ -622,9 +622,16 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
                 if (maxDeviationBps > 0 && toWithdraw.mulDiv(BPS, total) < maxDeviationBps) continue;
 
                 try strategy.withdraw(toWithdraw) returns (uint256 withdrawn) {
-                    // Safe subtraction: strategy may return slightly more than tracked due to rounding
                     if (withdrawn > trackedBalance[strategy]) {
-                        trackedBalance[strategy] = 0;
+                        // Refresh live balance instead of zeroing.
+                        // Pre-fix, zeroing trackedBalance hid unreconciled yield
+                        // Still held by the strategy, letting later depositors
+                        // Enter at a stale (cheap) price until the next reconcile.
+                        try strategy.balanceOf() returns (uint256 liveBalance) {
+                            trackedBalance[strategy] = liveBalance;
+                        } catch {
+                            trackedBalance[strategy] = 0;
+                        }
                     } else {
                         trackedBalance[strategy] -= withdrawn;
                     }
@@ -957,7 +964,15 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
                 uint256 toWithdraw = remaining > available ? available : remaining;
                 try strategy.withdraw(toWithdraw) returns (uint256 withdrawn) {
                     if (withdrawn > trackedBalance[strategy]) {
-                        trackedBalance[strategy] = 0;
+                        // Refresh live balance instead of zeroing.
+                        // Pre-fix, zeroing trackedBalance hid unreconciled yield
+                        // Still held by the strategy, letting later depositors
+                        // Enter at a stale (cheap) price until the next reconcile.
+                        try strategy.balanceOf() returns (uint256 liveBalance) {
+                            trackedBalance[strategy] = liveBalance;
+                        } catch {
+                            trackedBalance[strategy] = 0;
+                        }
                     } else {
                         trackedBalance[strategy] -= withdrawn;
                     }
