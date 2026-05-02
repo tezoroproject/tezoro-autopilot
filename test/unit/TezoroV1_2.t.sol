@@ -364,6 +364,44 @@ contract TezoroV1_2Test is Test {
         assertEq(vault.rewardsModule(), rm);
     }
 
+    function test_setRewardsModule_rotationRequiresTimelockEvenWithEmptyOldModule() public {
+        // First-time setup is allowed without timelock
+        address rmA = makeAddr("rmA");
+        vm.prank(admin);
+        vault.setRewardsModule(rmA);
+
+        // Rotation while timelockDelay == 0 must revert, even when the old
+        // module holds no base asset. Defends against an admin who would
+        // otherwise rotate the pointer to a balance-rich address to inflate
+        // totalAssets() and redeem at the inflated NAV.
+        address rmB = makeAddr("rmB");
+        vm.prank(admin);
+        vm.expectRevert(TezoroV1_2.TimelockRequiredForRewardsModuleRotation.selector);
+        vault.setRewardsModule(rmB);
+    }
+
+    function test_setRewardsModule_rotationWorksWithTimelockProposal() public {
+        // First-time setup is allowed without timelock
+        address rmA = makeAddr("rmA");
+        vm.prank(admin);
+        vault.setRewardsModule(rmA);
+
+        // Enable timelock and schedule the rotation.
+        vm.prank(admin);
+        vault.setTimelockDelay(1 days);
+
+        address rmB = makeAddr("rmB");
+        bytes32 opHash = keccak256(abi.encode("setRewardsModule", rmB));
+        vm.prank(admin);
+        vault.proposeTimelock(opHash);
+        vm.warp(block.timestamp + 1 days);
+
+        // After the delay window, rotation succeeds.
+        vm.prank(admin);
+        vault.setRewardsModule(rmB);
+        assertEq(vault.rewardsModule(), rmB);
+    }
+
     // =========================================================================
     // Strategy Management
     // =========================================================================
@@ -2817,7 +2855,18 @@ contract TezoroV1_2Test is Test {
         // Park base asset in the outgoing module (post-swap, pre-sweep state).
         token.mint(rmOld, 1);
 
+        // Rotation now requires timelockDelay > 0 + a scheduled proposal.
+        // Set up the timelock first so the test reaches the empty-old-module
+        // check this case is asserting on.
+        vm.prank(admin);
+        vault.setTimelockDelay(1 days);
+
         address rmNew = makeAddr("rmNew");
+        bytes32 opHash = keccak256(abi.encode("setRewardsModule", rmNew));
+        vm.prank(admin);
+        vault.proposeTimelock(opHash);
+        vm.warp(block.timestamp + 1 days);
+
         vm.prank(admin);
         vm.expectRevert(TezoroV1_2.RewardsModuleNotEmpty.selector);
         vault.setRewardsModule(rmNew);
@@ -2849,7 +2898,16 @@ contract TezoroV1_2Test is Test {
         vm.prank(rmOld);
         token.transfer(address(0xdead), 100e6);
 
+        // Rotation requires timelockDelay > 0 + a scheduled proposal.
+        vm.prank(admin);
+        vault.setTimelockDelay(1 days);
+
         address rmNew = makeAddr("rmNew");
+        bytes32 opHash = keccak256(abi.encode("setRewardsModule", rmNew));
+        vm.prank(admin);
+        vault.proposeTimelock(opHash);
+        vm.warp(block.timestamp + 1 days);
+
         vm.prank(admin);
         vault.setRewardsModule(rmNew);
         assertEq(vault.rewardsModule(), rmNew);

@@ -168,6 +168,15 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     ///      module still holds base-asset rewards that have not been
     ///      swept. Caller must call old.sweepToVault() first.
     error RewardsModuleNotEmpty();
+    /// @dev Thrown by setRewardsModule when the caller attempts to
+    ///      rotate an existing rewards module while timelockDelay == 0.
+    ///      First-time setup (rewardsModule == address(0)) is exempt.
+    ///      Closes an admin-attack vector where a compromised admin could
+    ///      point rewardsModule at a balance-rich address to inflate
+    ///      totalAssets() (which includes the rewards module's base-asset
+    ///      balance) and redeem at the inflated NAV. Defence in depth on
+    ///      top of the multisig threshold model.
+    error TimelockRequiredForRewardsModuleRotation();
 
     // --- Modifiers ---
 
@@ -924,12 +933,26 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     }
 
     function setRewardsModule(address newModule) external onlyAdmin {
+        // First-time setup (rewardsModule == address(0)) is allowed without
+        // timelock so a freshly deployed vault can be wired without a
+        // mandatory delay. Any subsequent rotation requires timelockDelay > 0
+        // independently of the global timelock state — pointing
+        // rewardsModule at a balance-rich address would inflate
+        // totalAssets() (the RewardsModule's base-asset balance is included
+        // in NAV), so observers need a delay window to react. Operationally
+        // the production admin is a Safe multisig with timelockDelay > 0
+        // configured; this gate is defence-in-depth that closes the window
+        // even if the multisig threshold is compromised.
+        bool isFirstSetup = rewardsModule == address(0);
+        if (!isFirstSetup && timelockDelay == 0) {
+            revert TimelockRequiredForRewardsModuleRotation();
+        }
         _consumeTimelockIfActive(keccak256(abi.encode("setRewardsModule", newModule)));
-        // Refuse rotation if the outgoing module still holds
-        // Base asset. Without this gate the leftover would strand —
-        // SweepToVault on the old module reverts (msg.sender no longer
-        // Matches rewardsModule) and rescueToken refuses the base asset.
-        if (rewardsModule != address(0) && IERC20(asset()).balanceOf(rewardsModule) > 0) {
+        // Refuse rotation if the outgoing module still holds base asset.
+        // Without this gate the leftover would strand — sweepToVault on the
+        // old module reverts (msg.sender no longer matches rewardsModule)
+        // and rescueToken refuses the base asset.
+        if (!isFirstSetup && IERC20(asset()).balanceOf(rewardsModule) > 0) {
             revert RewardsModuleNotEmpty();
         }
         emit RewardsModuleUpdated(rewardsModule, newModule);
