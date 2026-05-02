@@ -19,6 +19,12 @@ contract FluidStrategyV1_2 is IStrategy {
     error NotVault();
     error ZeroAddress();
     error CannotSweepAsset();
+    /// @dev Thrown when the fToken_'s underlying asset does not match asset_.
+    ///      Without the check, the mismatch surfaces only at the first live
+    ///      deposit (the call atomically reverts, no silent loss), but the
+    ///      adapter would have entered production in a broken configuration.
+    ///      The constructor fails fast at deployment instead.
+    error FluidTokenMismatch();
 
     modifier onlyVault() {
         if (msg.sender != vault) revert NotVault();
@@ -29,6 +35,9 @@ contract FluidStrategyV1_2 is IStrategy {
         if (asset_ == address(0) || fToken_ == address(0) || vault_ == address(0)) {
             revert ZeroAddress();
         }
+        // Cross-check the fToken_'s underlying matches asset_ so a mismatched
+        // pair fails at deployment instead of at the first live deposit.
+        if (IERC4626(fToken_).asset() != asset_) revert FluidTokenMismatch();
 
         asset = asset_;
         fToken = IERC4626(fToken_);
