@@ -150,6 +150,12 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
     ///      fails to recover the full tracked balance. Admin should call
     ///      recallToIdle or wait for liquidity before retrying.
     error StrategyNotFullyRecovered();
+    /// @dev Thrown by deposit/mint when the resulting share
+    ///      mint would round to zero. Pre-fix, such interactions still
+    ///      called _accruePerformanceFee, which would advance highWaterMark
+    ///      against an undiluted share price and let later real gains skip
+    ///      performance fees up to the inflated benchmark.
+    error ZeroSharesMinted();
     /// @dev Thrown by setRewardsModule when the caller attempts to
     ///      rotate an existing rewards module while timelockDelay == 0.
     ///      First-time setup (rewardsModule == address(0)) is exempt.
@@ -335,6 +341,9 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         address receiver
     ) public override nonReentrant whenNotPaused whenFresh returns (uint256) {
         _accruePerformanceFee();
+        // Reject deposits that would mint zero shares so they
+        // Cannot quietly bump highWaterMark or strand the depositor's assets.
+        if (previewDeposit(assets) == 0) revert ZeroSharesMinted();
         return super.deposit(assets, receiver);
     }
 
@@ -342,6 +351,8 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         uint256 shares,
         address receiver
     ) public override nonReentrant whenNotPaused whenFresh returns (uint256) {
+        // Reject mint(0).
+        if (shares == 0) revert ZeroSharesMinted();
         _accruePerformanceFee();
         return super.mint(shares, receiver);
     }
@@ -1118,16 +1129,20 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
         uint256 totalShares = totalSupply();
         fee = gain.mulDiv(totalShares, oneShare).mulDiv(performanceFeeBps, BPS);
 
-        if (fee > 0) {
-            uint256 feeShares = convertToShares(fee);
-            if (feeShares > 0) {
-                _mint(feeRecipient, feeShares);
-                emit PerformanceFeeCollected(fee, feeRecipient);
-            }
-        }
+        // Only advance HWM when we actually mint fee shares.
+        // Pre-fix, sub-rounding gains (e.g., 1 wei donations or single-wei
+        // Deposits) bumped HWM without paying fees, so a later genuine gain
+        // Measured against the inflated benchmark went untaxed until share
+        // Price climbed back over it.
+        if (fee == 0) return 0;
+
+        uint256 feeShares = convertToShares(fee);
+        if (feeShares == 0) return 0;
+
+        _mint(feeRecipient, feeShares);
+        emit PerformanceFeeCollected(fee, feeRecipient);
 
         // Post-mint HWM: reflects actual share price after fee dilution.
-        // If no shares were minted (fee rounded to 0), equals currentSharePrice.
         highWaterMark = convertToAssets(oneShare);
     }
 }
