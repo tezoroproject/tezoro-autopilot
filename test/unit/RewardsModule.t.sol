@@ -279,6 +279,90 @@ contract RewardsModuleTest is Test {
     }
 
     // =========================================================================
+    // Typed wrappers pin recipient on-chain
+    // =========================================================================
+
+    /// @notice The typed wrapper hardcodes `account` to address(this); even if
+    ///         the URD calldata exposed a free recipient parameter, the module
+    ///         cannot route the reward elsewhere. Pre-fix, only the raw
+    ///         executeClaim path existed and a misconstructed claim could send
+    ///         rewards to an attacker-controlled address by tampering with the
+    ///         calldata's recipient field.
+    function test_claimMorphoUrdPinsRecipientToModule() public {
+        MockMorphoUrd urd = new MockMorphoUrd();
+        rwd.mint(address(urd), 1_000e18);
+
+        bytes4 morphoSelector = module.MORPHO_URD_CLAIM_SELECTOR();
+        vm.prank(admin);
+        module.setClaimWhitelist(address(urd), morphoSelector, true);
+
+        uint256 before = rwd.balanceOf(address(module));
+        bytes32[] memory proof = new bytes32[](0);
+        vm.prank(keeper);
+        module.claimMorphoUrd(address(urd), address(rwd), 1_000e18, proof);
+
+        assertEq(urd.lastAccount(), address(module), "wrapper must pin account = module");
+        assertEq(rwd.balanceOf(address(module)) - before, 1_000e18, "rewards must land in module");
+    }
+
+    /// @notice Same regression for the Merkl-style distributor: every entry of
+    ///         the on-chain `users[]` array is forced to address(this).
+    function test_claimMerklPinsRecipientForEveryEntry() public {
+        MockMerklDistributor distributor = new MockMerklDistributor();
+        rwd.mint(address(distributor), 600e18);
+
+        bytes4 merklSelector = module.MERKL_CLAIM_SELECTOR();
+        vm.prank(admin);
+        module.setClaimWhitelist(address(distributor), merklSelector, true);
+
+        address[] memory tokens = new address[](2);
+        tokens[0] = address(rwd);
+        tokens[1] = address(rwd);
+        uint256[] memory amounts = new uint256[](2);
+        amounts[0] = 200e18;
+        amounts[1] = 400e18;
+        bytes32[][] memory proofs = new bytes32[][](2);
+        proofs[0] = new bytes32[](0);
+        proofs[1] = new bytes32[](0);
+
+        uint256 before = rwd.balanceOf(address(module));
+        vm.prank(keeper);
+        module.claimMerkl(address(distributor), tokens, amounts, proofs);
+
+        // All `users[]` entries in the on-chain encoding must equal the module.
+        assertEq(distributor.recordedUserCount(), 2, "users array must have 2 entries");
+        assertEq(distributor.recordedUser(0), address(module));
+        assertEq(distributor.recordedUser(1), address(module));
+        assertEq(rwd.balanceOf(address(module)) - before, 600e18, "rewards must land in module");
+    }
+
+    /// @notice Wrappers still respect the whitelist: a non-whitelisted target
+    ///         reverts before any external call. Pre-fix, this gate existed
+    ///         only for executeClaim — the wrappers must inherit it.
+    function test_claimMorphoUrdRequiresWhitelist() public {
+        MockMorphoUrd urd = new MockMorphoUrd();
+        bytes32[] memory proof = new bytes32[](0);
+
+        vm.prank(keeper);
+        vm.expectRevert(RewardsModuleV1_2.TargetNotWhitelisted.selector);
+        module.claimMorphoUrd(address(urd), address(rwd), 1, proof);
+    }
+
+    function test_claimMerklRequiresWhitelist() public {
+        MockMerklDistributor distributor = new MockMerklDistributor();
+        address[] memory tokens = new address[](1);
+        tokens[0] = address(rwd);
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1;
+        bytes32[][] memory proofs = new bytes32[][](1);
+        proofs[0] = new bytes32[](0);
+
+        vm.prank(keeper);
+        vm.expectRevert(RewardsModuleV1_2.TargetNotWhitelisted.selector);
+        module.claimMerkl(address(distributor), tokens, amounts, proofs);
+    }
+
+    // =========================================================================
     // swap — reward token → base asset
     // =========================================================================
 
@@ -622,5 +706,56 @@ contract MockClaimable {
 
     function claim(address to, uint256 amount) external {
         IERC20(token).safeTransfer(to, amount);
+    }
+}
+
+// ---- Mock Morpho-style Universal Reward Distributor ----
+
+contract MockMorphoUrd {
+    using SafeERC20 for IERC20;
+
+    address public lastAccount;
+    address public lastReward;
+    uint256 public lastClaimable;
+
+    /// @dev signature must match MORPHO_URD_CLAIM_SELECTOR:
+    ///      claim(address account, address reward, uint256 claimable, bytes32[] proof)
+    function claim(address account, address reward, uint256 claimable, bytes32[] calldata) external {
+        lastAccount = account;
+        lastReward = reward;
+        lastClaimable = claimable;
+        IERC20(reward).safeTransfer(account, claimable);
+    }
+}
+
+// ---- Mock Merkl-style distributor ----
+
+contract MockMerklDistributor {
+    using SafeERC20 for IERC20;
+
+    address[] internal _recordedUsers;
+
+    /// @dev signature must match MERKL_CLAIM_SELECTOR:
+    ///      claim(address[] users, address[] tokens, uint256[] amounts, bytes32[][] proofs)
+    function claim(
+        address[] calldata users,
+        address[] calldata tokens,
+        uint256[] calldata amounts,
+        bytes32[][] calldata
+    ) external {
+        require(users.length == tokens.length && tokens.length == amounts.length, "len mismatch");
+        delete _recordedUsers;
+        for (uint256 i = 0; i < users.length; i++) {
+            _recordedUsers.push(users[i]);
+            IERC20(tokens[i]).safeTransfer(users[i], amounts[i]);
+        }
+    }
+
+    function recordedUser(uint256 i) external view returns (address) {
+        return _recordedUsers[i];
+    }
+
+    function recordedUserCount() external view returns (uint256) {
+        return _recordedUsers.length;
     }
 }
