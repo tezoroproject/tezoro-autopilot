@@ -241,6 +241,31 @@ contract AaveV3StrategyV1_2Test is Test {
     }
 
     // =========================================================================
+    // IsHealthy AND'd with pool liquidity (config-flag leg lives in Aave-pause/freeze tests above)
+    // =========================================================================
+
+    /// @notice Reserve flags say the market is healthy but the aToken
+    ///         contract has zero underlying — isHealthy must still report
+    ///         false. Without this leg of the AND a deprecated reserve with
+    ///         healthy flags but no underlying liquidity would be reported
+    ///         as healthy and continue attracting allocations the strategy
+    ///         can never pay out.
+    function test_isHealthyFalseWhenPoolLiquidityZero() public {
+        // Strategy seeded in setUp; reserve config already healthy.
+        assertTrue(strategy.isHealthy(), "precondition: healthy");
+
+        // Drain underlying out of the aToken contract (forge cheat — no
+        // real transfer, just balance adjustment) to model a fully
+        // deprecated reserve where the strategy can never pay anyone out.
+        deal(address(token), address(aToken), 0);
+
+        assertFalse(
+            strategy.isHealthy(),
+            "config flags OK but zero pool liquidity must report unhealthy"
+        );
+    }
+
+    // =========================================================================
     // Constructor validates aToken pairing
     // =========================================================================
 
