@@ -559,6 +559,13 @@ contract TezoroV1_2 is ERC4626, ReentrancyGuard {
             depositFrozenStrategies[strategy] = true;
             emit StrategyDepositFrozen(address(strategy));
         }
+
+        // Revoke the strategy's spend allowance during recall so a
+        // faulty/compromised strategy cannot pull idle vault funds via its
+        // still-live ERC20 allowance after we have signalled distress.
+        // Approval is re-granted only if admin re-enables the strategy
+        // (unfreezeStrategyDeposits below).
+        IERC20(asset()).forceApprove(address(strategy), 0);
     }
 
     /// @notice Force-redeem all shares of a user, sending assets to the user (not admin).
