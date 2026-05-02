@@ -2640,4 +2640,68 @@ contract TezoroV1_2Test is Test {
         vm.expectRevert(TezoroV1_2.WithdrawalFailed.selector);
         vault.withdraw(50_000e6, alice, alice);
     }
+
+    // =========================================================================
+    // Cap enforcement uses live total assets
+    // =========================================================================
+
+    /// @notice maxDeposit/maxMint must read live strategy balances when
+    ///         enforcing the deposit cap, even when trackedBalance is stale
+    ///         from unreconciled yield. Pre-fix, totalAssets() drove the cap
+    ///         check, so a depositor could slip in between cap-reach and the
+    ///         next reconcile by exploiting the stale (lower) cached NAV.
+    function test_maxDepositReflectsLiveStrategyBalance() public {
+        // Cap = 100k.
+        uint256 cap = 100_000e6;
+        vm.prank(admin);
+        vault.setDepositCap(cap);
+
+        vm.prank(alice);
+        vault.deposit(60_000e6, alice);
+
+        IStrategy[] memory strats = new IStrategy[](1);
+        uint256[] memory bpsList = new uint256[](1);
+        strats[0] = IStrategy(address(strategyA));
+        bpsList[0] = 5_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        // Inject 50k unreconciled yield: strategy.balanceOf is now well above
+        // trackedBalance, so totalAssets stays stale at ~60k while the live
+        // figure is ~110k.
+        strategyA.simulateYield(50_000e6);
+
+        // Pre-fix would return cap - totalAssets() = 100k - 60k = 40k available.
+        // Post-fix uses live total = ~110k > cap → 0 available.
+        assertEq(vault.maxDeposit(bob), 0, "live balance must close the cap");
+        assertEq(vault.maxMint(bob), 0, "live balance must close the cap (mint side)");
+    }
+
+    /// @notice _liveTotalAssets must fall back to trackedBalance when a
+    ///         strategy's balanceOf reverts, otherwise a single broken strategy
+    ///         would block the cap-check view altogether.
+    function test_liveTotalAssetsFallsBackOnBrokenStrategy() public {
+        uint256 cap = 100_000e6;
+        vm.prank(admin);
+        vault.setDepositCap(cap);
+
+        vm.prank(alice);
+        vault.deposit(60_000e6, alice);
+
+        IStrategy[] memory strats = new IStrategy[](1);
+        uint256[] memory bpsList = new uint256[](1);
+        strats[0] = IStrategy(address(strategyA));
+        bpsList[0] = 5_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        // Break A so balanceOf reverts. Cap check must still work using the
+        // last cached tracked balance.
+        strategyA.setBroken(true);
+
+        uint256 maxD = vault.maxDeposit(bob);
+        // Cap (100k) - cached total (~60k) ≈ 40k should still be reported.
+        assertGt(maxD, 0, "broken strategy must not block cap view");
+        assertLe(maxD, cap, "max deposit must not exceed cap");
+    }
 }
