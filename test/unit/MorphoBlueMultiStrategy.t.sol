@@ -657,6 +657,73 @@ contract MorphoBlueMultiStrategyTest is Test {
         assertTrue(strategy.isHealthy());
     }
 
+    // =========================================================================
+    // IsHealthy is strategy-level, not
+    //                                 global-market-non-emptiness
+    // =========================================================================
+
+    /// @notice A fully utilised market (totalSupplyAssets == totalBorrowAssets,
+    ///         no withdrawable headroom) must report unhealthy. Pre-fix the
+    ///         predicate was `totalSupplyShares > 0` — a global liveness
+    ///         signal that stayed positive while the parent rebalancer kept
+    ///         depositing into a market that could not service exits.
+    function test_isHealthyFalseOnFullyUtilisedMarket() public {
+        _fundVaultAndApprove(100e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(100e6);
+        vm.prank(keeperAddr);
+        strategy.allocate(midA, 100e6);
+        assertTrue(strategy.isHealthy(), "precondition: healthy");
+
+        // Borrowers fully draw the supply.
+        mockMorpho.simulateBorrows(midA, 100e6);
+
+        assertFalse(
+            strategy.isHealthy(),
+            "fully-utilised market must report unhealthy"
+        );
+    }
+
+    /// @notice A market that is otherwise depositable but has been frozen
+    ///         on the wrapper must report unhealthy — its presence in the
+    ///         active set has been operationally revoked, the rebalancer
+    ///         must not push fresh capital there.
+    function test_isHealthyFalseWhenAllMarketsFrozen() public {
+        _fundVaultAndApprove(100e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(100e6);
+        vm.prank(keeperAddr);
+        strategy.allocate(midA, 100e6);
+        assertTrue(strategy.isHealthy());
+
+        vm.prank(adminAddr);
+        strategy.freezeMarketDeposits(midA);
+
+        assertFalse(
+            strategy.isHealthy(),
+            "deposit-frozen market must not contribute to health"
+        );
+    }
+
+    /// @notice A second healthy market keeps the strategy healthy even when
+    ///         one market is frozen — the predicate is "ANY approved market
+    ///         is healthy", not "ALL markets healthy".
+    function test_isHealthyTrueWhenAtLeastOneMarketHealthy() public {
+        _fundVaultAndApprove(200e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(200e6);
+        vm.prank(keeperAddr);
+        strategy.allocate(midA, 100e6);
+        vm.prank(keeperAddr);
+        strategy.allocate(midB, 100e6);
+
+        // Freeze A but B stays healthy.
+        vm.prank(adminAddr);
+        strategy.freezeMarketDeposits(midA);
+
+        assertTrue(strategy.isHealthy(), "B keeps the strategy healthy");
+    }
+
     // ========== sweepReward ==========
 
     function test_sweepReward_works() public {

@@ -220,10 +220,23 @@ contract MorphoBlueMultiStrategyV1_2 is IStrategy, ReentrancyGuard {
     }
 
     function isHealthy() external view override returns (bool) {
+        // Strategy-level health: at least one approved market that is
+        // (a) not deposit-frozen on the wrapper and
+        // (b) has withdrawable liquidity (totalSupplyAssets > totalBorrowAssets).
+        // Reading `totalSupplyShares > 0` on any market measures global
+        // market non-emptiness, which says nothing about whether THIS
+        // wrapper's allocations would be safe. Fully utilised markets and
+        // bad-debt markets both keep that signal positive while the
+        // rebalancer keeps depositing into them.
+        // Bad-debt detection per se is intentionally not on-chain in this
+        // wrapper; off-chain monitoring of asset-per-share ratios drives the
+        // freezeMarketDeposits response primitive.
         uint256 len = _marketIds.length;
         for (uint256 i = 0; i < len; i++) {
-            MorphoMarket memory m = morpho.market(_marketIds[i]);
-            if (m.totalSupplyShares > 0) return true;
+            Id mid = _marketIds[i];
+            if (depositFrozenMarkets[mid]) continue;
+            MorphoMarket memory m = morpho.market(mid);
+            if (m.totalSupplyAssets > m.totalBorrowAssets) return true;
         }
         return false;
     }
