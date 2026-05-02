@@ -86,6 +86,9 @@ contract CompoundV3StrategyV1_2 is IStrategy {
     }
 
     function availableLiquidity() public view override returns (uint256) {
+        // Respect Comet's withdraw pause flag so the vault's
+        // MaxWithdraw/maxRedeem don't over-promise during a Compound pause.
+        if (comet.isWithdrawPaused()) return 0;
         uint256 ourBalance = comet.balanceOf(address(this));
         // Comet holds the base token directly -- check pool liquidity
         uint256 poolLiquidity = IERC20(asset).balanceOf(address(comet));

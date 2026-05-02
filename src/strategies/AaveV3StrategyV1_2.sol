@@ -73,6 +73,15 @@ contract AaveV3StrategyV1_2 is IStrategy {
     }
 
     function availableLiquidity() public view override returns (uint256) {
+        // Reserve config bitmap: bit 56 = ACTIVE, bit 60 = PAUSED. Inactive
+        // or paused reserves can't service withdrawals, so we report 0 to
+        // keep maxWithdraw/maxRedeem honest. FROZEN (bit 57) only blocks
+        // deposits, so withdrawals are still allowed there.
+        uint256 config = pool.getConfiguration(asset);
+        bool isActive = (config & (uint256(1) << 56)) != 0;
+        bool isPaused = (config & (uint256(1) << 60)) != 0;
+        if (!isActive || isPaused) return 0;
+
         uint256 ourBalance = aToken.balanceOf(address(this));
         uint256 poolLiquidity = IERC20(asset).balanceOf(address(aToken));
         return ourBalance > poolLiquidity ? poolLiquidity : ourBalance;
