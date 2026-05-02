@@ -107,8 +107,17 @@ contract CompoundV3StrategyV1_2 is IStrategy {
     }
 
     function isHealthy() external view override returns (bool) {
-        // If supply or withdraw is paused, consider unhealthy
-        return !comet.isSupplyPaused() && !comet.isWithdrawPaused();
+        // Match isHealthy to the rebalancer's deposit decision: the strategy
+        // is healthy iff Comet accepts new supply AND has present base
+        // liquidity to service exits. Reading only the pause flags lets a
+        // fully-utilised Comet (zero base balance, all assets borrowed out)
+        // report healthy; the rebalancer would then keep routing fresh
+        // capital into it and user redeem-paths would surface the empty
+        // reserve as a withdrawal failure. The exit-side availableLiquidity
+        // calculation is unchanged — health gates deposits, withdrawals stay
+        // conservative.
+        if (comet.isSupplyPaused() || comet.isWithdrawPaused()) return false;
+        return IERC20(asset).balanceOf(address(comet)) > 0;
     }
 
     /// @notice Claim COMP rewards and forward to rewardsModule.

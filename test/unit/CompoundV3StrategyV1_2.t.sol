@@ -132,6 +132,29 @@ contract CompoundV3StrategyV1_2Test is Test {
     }
 
     // =========================================================================
+    // IsHealthy requires positive base liquidity in addition to pause flags
+    // =========================================================================
+
+    /// @notice Pause flags say healthy but the Comet base balance is zero
+    ///         (every deposit borrowed out — fully utilised). isHealthy
+    ///         must report false; without this leg the rebalancer would
+    ///         keep routing fresh capital into a market that can't pay
+    ///         redeems. The exit-side availableLiquidity already returns 0
+    ///         in that state, but health gates deposits, not withdrawals.
+    function test_isHealthyFalseWhenCometBaseLiquidityZero() public {
+        // Strategy seeded in setUp; Comet currently holds the supply.
+        assertTrue(strategy.isHealthy(), "precondition: healthy");
+
+        // Drain the Comet's base balance — models a fully-utilised market.
+        deal(address(token), address(comet), 0);
+
+        assertFalse(
+            strategy.isHealthy(),
+            "fully-utilised Comet (zero base) must report unhealthy"
+        );
+    }
+
+    // =========================================================================
     // Constructor validates Comet baseToken
     // =========================================================================
 
