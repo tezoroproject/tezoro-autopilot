@@ -148,9 +148,20 @@ contract ERC4626MultiStrategyV1_2 is IStrategy, ReentrancyGuard {
                     withdrawn += got;
                     remaining = remaining > got ? remaining - got : 0;
                 } catch {
-                    // Fallback: some vaults (e.g., YO.xyz) only support redeem, not withdraw.
-                    // Convert requested assets to shares and redeem instead.
-                    uint256 shares = sv.convertToShares(toWithdraw);
+                    // Fallback: some vaults (e.g., YO.xyz) only support redeem,
+                    // not withdraw. Use previewWithdraw (withdraw-side quote,
+                    // rounds UP) rather than convertToShares (deposit-side,
+                    // rounds DOWN). Round-down quoting can deliver less than
+                    // `toWithdraw`, or quote zero shares for a non-zero target
+                    // when the sub-vault's share price is above 1 — leaving
+                    // redeemable liquidity unreachable via the ordinary path.
+                    uint256 shares = sv.previewWithdraw(toWithdraw);
+                    // Cap against maxRedeem so a previewWithdraw quote larger
+                    // than the sub-vault's per-call capacity does not push the
+                    // redeem into a hard revert; recover whatever liquidity is
+                    // presently available.
+                    uint256 maxR = sv.maxRedeem(address(this));
+                    if (shares > maxR) shares = maxR;
                     if (shares == 0) {
                         emit WithdrawFailed(address(sv));
                         continue;

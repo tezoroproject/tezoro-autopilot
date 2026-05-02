@@ -780,6 +780,82 @@ contract ERC4626MultiStrategyTest is Test {
         assertApproxEqAbs(avail, 350e6, 2, "broken sub-vault must not poison availableLiquidity");
     }
 
+    // =========================================================================
+    // Redeem fallback uses previewWithdraw
+    // =========================================================================
+
+    /// @notice Pre-fix, the redeem-only fallback in withdraw() quoted shares
+    ///         via convertToShares — a deposit-side, round-DOWN calculation.
+    ///         When the sub-vault's share price is above 1 (any donation, any
+    ///         interest accrual), a small withdrawal target rounded to ZERO
+    ///         shares and the fallback emitted WithdrawFailed even though the
+    ///         sub-vault still had redeemable liquidity. The liquidity stayed
+    ///         unreachable through ordinary vault-mediated withdrawals.
+    ///         Post-fix uses previewWithdraw (withdraw-side, round-UP) capped
+    ///         against maxRedeem.
+    function test_redeemFallbackUsesPreviewWithdraw() public {
+        // 1. Deploy a redeem-only sub-vault (some real-world ERC-4626s
+        // (e.g. YO.xyz) only support redeem, not withdraw).
+        RedeemOnlyVault4626 ro = new RedeemOnlyVault4626(IERC20(address(token)));
+        vm.prank(adminAddr);
+        strategy.addSubVault(address(ro));
+
+        // 2. Allocate strategy idle into ro at 1:1.
+        _fundVaultAndApprove(100e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(100e6);
+        vm.prank(keeperAddr);
+        strategy.allocate(address(ro), 100e6);
+
+        // 3. Inflate ro's share price: donate 100e6 directly, totalAssets
+        //    doubles while supply stays the same → 1 wei withdrawal rounds
+        //    convertToShares → 0 (the bug surface) and previewWithdraw → 1.
+        token.mint(address(ro), 100e6);
+
+        // sanity: rounding direction differs as the audit describes.
+        assertEq(ro.convertToShares(1), 0, "deposit-side rounds 1 wei to 0 shares");
+        assertEq(ro.previewWithdraw(1), 1, "withdraw-side rounds 1 wei up to 1 share");
+
+        // 4. Vault asks strategy for 1 wei. The other sub-vaults hold no
+        //    position, so the loop reaches ro and hits the redeem fallback.
+        uint256 vaultBalBefore = token.balanceOf(vaultAddr);
+        vm.prank(vaultAddr);
+        uint256 withdrawn = strategy.withdraw(1);
+
+        // Post-fix: previewWithdraw quotes 1 share, redeem returns 2 wei,
+        //          delivery satisfies the target.
+        // Pre-fix:  convertToShares quotes 0, fallback continues without a
+        //          redeem, withdrawn == 0.
+        assertGe(withdrawn, 1, "redeem fallback must reach available sub-vault liquidity");
+        assertGe(token.balanceOf(vaultAddr) - vaultBalBefore, 1);
+    }
+
+    /// @notice Cap against maxRedeem so a previewWithdraw that quotes more
+    ///         shares than the sub-vault can service this transaction does
+    ///         not push the redeem into a hard revert.
+    function test_redeemFallbackCapsToMaxRedeem() public {
+        RedeemOnlyVault4626 ro = new RedeemOnlyVault4626(IERC20(address(token)));
+        ro.setMaxRedeemCap(50e6); // sub-vault can service at most 50e6 shares per call
+        vm.prank(adminAddr);
+        strategy.addSubVault(address(ro));
+
+        _fundVaultAndApprove(200e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(200e6);
+        vm.prank(keeperAddr);
+        strategy.allocate(address(ro), 200e6);
+
+        // Withdraw more than the cap. Without the maxRedeem cap, the fallback
+        // would call redeem(200e6) which the sub-vault rejects, and the whole
+        // sub-vault would be skipped via WithdrawFailed.
+        uint256 vaultBalBefore = token.balanceOf(vaultAddr);
+        vm.prank(vaultAddr);
+        uint256 withdrawn = strategy.withdraw(200e6);
+
+        assertApproxEqAbs(withdrawn, 50e6, 2, "must extract the maxRedeem-capped portion");
+        assertApproxEqAbs(token.balanceOf(vaultAddr) - vaultBalBefore, 50e6, 2);
+    }
+
     // ========== Helpers ==========
 
     function _fundVaultAndApprove(uint256 amount) internal {
@@ -823,5 +899,37 @@ contract RevertingVault4626 is ERC4626 {
     function convertToAssets(uint256 shares) public view override returns (uint256) {
         if (broken) revert("broken");
         return super.convertToAssets(shares);
+    }
+}
+
+// ---- Mock ERC-4626 vault that supports redeem only (no withdraw) ----
+//
+// Models real-world sub-vaults (e.g. YO.xyz) that expose ERC-4626 but only
+// implement the share-quoted exit. withdraw reverts; the multi-strategy
+// must fall back to redeem with the correct (round-up) share quote.
+contract RedeemOnlyVault4626 is ERC4626 {
+    uint256 public maxRedeemCap = type(uint256).max;
+
+    constructor(IERC20 asset_) ERC4626(asset_) ERC20("Redeem-only Vault", "roVAULT") {}
+
+    function setMaxRedeemCap(uint256 cap) external {
+        maxRedeemCap = cap;
+    }
+
+    function maxWithdraw(address) public pure override returns (uint256) {
+        // Setting this to zero would make the parent strategy skip the
+        // sub-vault entirely; redeem-only sub-vaults usually quote a
+        // generous max here even though they can't service withdraw.
+        // Returning a large value keeps the strategy in the redeem fallback.
+        return type(uint256).max;
+    }
+
+    function maxRedeem(address owner) public view override returns (uint256) {
+        uint256 owned = balanceOf(owner);
+        return owned > maxRedeemCap ? maxRedeemCap : owned;
+    }
+
+    function withdraw(uint256, address, address) public pure override returns (uint256) {
+        revert("redeem-only");
     }
 }
