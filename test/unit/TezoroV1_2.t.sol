@@ -233,6 +233,18 @@ contract TezoroV1_2Test is Test {
         assertEq(vault.highWaterMark(), 1e6);
     }
 
+    /// @notice Audit this fix (Oak 2026-04-24): zero idle buffer is an
+    ///         intentionally-supported configuration for the most aggressive
+    ///         risk tier (deploy 100% of capital, accept strategy round-trips
+    ///         on every user withdrawal). Constructor must NOT reject 0.
+    ///         Documentation lives in the constructor NatSpec.
+    function test_zeroIdleBufferIsAccepted() public {
+        TezoroV1_2 v = new TezoroV1_2(
+            IERC20(address(token)), "T", "t", admin, feeRecipient, 0, 0
+        );
+        assertEq(v.idleBufferBps(), 0, "idleBufferBps == 0 must be accepted");
+    }
+
     // =========================================================================
     // Modifier Revert Paths
     // =========================================================================
