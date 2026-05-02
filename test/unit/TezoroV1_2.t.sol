@@ -3166,4 +3166,62 @@ contract TezoroV1_2Test is Test {
         vm.warp(block.timestamp + 1 days + 1);
         assertTrue(vault.isTimelockReady(opHash));
     }
+
+    // =========================================================================
+    // ForceRedeem is recovery, not migration
+    // =========================================================================
+
+    /// @notice forceRedeem returns assets to the share-holder address by
+    ///         design (theft protection — admin cannot redirect to a
+    ///         chosen receiver). This pins that behaviour so a future
+    ///         change re-introducing admin-chosen receivers trips a test.
+    ///         Migration semantics live in a separate v1.3 primitive
+    ///         (snapshot + escrow); the limitation is documented in the
+    ///         forceRedeem NatSpec.
+    function test_forceRedeemReturnsAssetsToShareHolder() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        uint256 aliceBalBefore = token.balanceOf(alice);
+        uint256 adminBalBefore = token.balanceOf(admin);
+
+        vm.prank(admin);
+        vault.forceRedeem(alice);
+
+        uint256 aliceGain = token.balanceOf(alice) - aliceBalBefore;
+        uint256 adminGain = token.balanceOf(admin) - adminBalBefore;
+
+        assertGt(aliceGain, 0, "shares redeem to the share-holder, not admin");
+        assertEq(adminGain, 0, "admin must not receive any of the redeemed assets");
+        assertEq(vault.balanceOf(alice), 0, "alice's shares fully burned");
+    }
+
+    /// @notice batchForceRedeem skips holders with zero shares (e.g. a
+    ///         holder who front-ran the proposal by transferring their
+    ///         position elsewhere). Operators must re-issue the proposal
+    ///         with the new address or roll the cleanup.
+    function test_batchForceRedeemSkipsTransferredHolder() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        // alice front-runs by transferring her shares to bob.
+        uint256 aliceShares = vault.balanceOf(alice);
+        vm.prank(alice);
+        vault.transfer(bob, aliceShares);
+
+        address[] memory users = new address[](2);
+        users[0] = alice;
+        users[1] = bob;
+
+        uint256 aliceBalBefore = token.balanceOf(alice);
+        uint256 bobBalBefore = token.balanceOf(bob);
+
+        vm.prank(admin);
+        vault.batchForceRedeem(users);
+
+        // alice's entry was skipped (she had no shares); bob received the
+        // redemption because he now holds the position.
+        assertEq(token.balanceOf(alice), aliceBalBefore, "front-runner alice received nothing");
+        assertGt(token.balanceOf(bob) - bobBalBefore, 0, "bob (current holder) received redemption");
+    }
 }
