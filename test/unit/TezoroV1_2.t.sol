@@ -2892,14 +2892,14 @@ contract TezoroV1_2Test is Test {
     }
 
     // =========================================================================
-    // Audit fix #17 (Oak 2026-04-24): pauseStrategy revokes ERC20 approval
+    // PauseStrategy revokes ERC20 approval
     // =========================================================================
 
     /// @notice Pausing a strategy must revoke the spend allowance the vault
     ///         granted on addStrategy. Pre-fix the allowance survived a pause,
     ///         so a compromised paused strategy could still drain idle vault
     ///         funds via the residual ERC20 approval.
-    function test_auditFix17_pauseStrategyRevokesAllowance() public {
+    function test_pauseStrategyRevokesAllowance() public {
         // Fresh add already grants the strategy a max allowance.
         assertEq(
             token.allowance(address(vault), address(strategyA)),
@@ -2918,7 +2918,7 @@ contract TezoroV1_2Test is Test {
     }
 
     /// @notice Symmetric: unpause must restore the allowance, mirroring add.
-    function test_auditFix17_unpauseStrategyRestoresAllowance() public {
+    function test_unpauseStrategyRestoresAllowance() public {
         vm.prank(admin);
         vault.pauseStrategy(IStrategy(address(strategyA)));
         assertEq(token.allowance(address(vault), address(strategyA)), 0);
