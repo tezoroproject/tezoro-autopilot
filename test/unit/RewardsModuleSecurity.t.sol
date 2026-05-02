@@ -238,7 +238,7 @@ contract RewardsModuleSecurityTest is Test {
         // Pre-fund module with some USDC to make sweepToVault possible
         usdc.mint(address(module), 500e6);
 
-        uint256 vaultBefore = vault.totalAssets();
+        uint256 vaultIdleBefore = usdc.balanceOf(address(vault));
 
         vm.prank(keeper);
         module.swap(
@@ -246,10 +246,14 @@ contract RewardsModuleSecurityTest is Test {
             abi.encodeCall(ReentrantSweepRouter.doSwap, (address(rwd), 100e18))
         );
 
-        // The reentrant sweepToVault was blocked by nonReentrant
-        // Module should still have the pre-funded USDC + swap output
+        // The reentrant sweepToVault was blocked by nonReentrant.
+        // Module should still hold the pre-funded USDC + swap output;
+        // vault's own token balance must be unchanged (no transfer happened).
+        // Note: post audit-this fix, vault.totalAssets() now sees through to the
+        // RewardsModule balance, so we assert on vault's raw idle balance
+        // (the actual transfer target) instead of totalAssets.
         assertGt(usdc.balanceOf(address(module)), 0, "Module USDC not swept (reentry blocked)");
-        assertEq(vault.totalAssets(), vaultBefore, "Vault should not have received sweep during swap");
+        assertEq(usdc.balanceOf(address(vault)), vaultIdleBefore, "Vault should not have received sweep during swap");
     }
 
     // =========================================================================
@@ -411,15 +415,17 @@ contract RewardsModuleSecurityTest is Test {
 
         usdc.mint(address(module), 1_000e6);
 
-        uint256 vaultBefore = vault.totalAssets();
+        uint256 vaultIdleBefore = usdc.balanceOf(address(vault));
         uint256 moduleBefore = usdc.balanceOf(address(module));
 
         vm.prank(keeper);
         module.sweepToVault();
 
-        // All USDC went to vault
+        // All USDC went to vault. totalAssets is unchanged post audit-this fix
+        // (RM rewards were already counted), so we assert on the actual
+        // transfer target (vault.idle) and that the module ended empty.
         assertEq(usdc.balanceOf(address(module)), 0, "Module should be empty");
-        assertEq(vault.totalAssets(), vaultBefore + moduleBefore, "Vault got exact amount");
+        assertEq(usdc.balanceOf(address(vault)), vaultIdleBefore + moduleBefore, "Vault idle gained module rewards");
     }
 
     // =========================================================================
@@ -821,7 +827,10 @@ contract RewardsModuleFuzzTest is Test {
     // Fuzz: sweepToVault preserves totalAssets accounting
     // =========================================================================
 
-    /// @notice sweepToVault always increases totalAssets by exactly the swept amount
+    /// @notice sweepToVault is custodial: it moves the swept amount from
+    ///         module to vault.idle without altering totalAssets, since
+    ///         post audit-this fix RM rewards are already counted in
+    ///         totalAssets while parked.
     function testFuzz_sweepToVault_exactAccounting(uint256 depositAmt, uint256 rewardAmt) public {
         depositAmt = bound(depositAmt, 1e6, 1_000_000e6);
         rewardAmt = bound(rewardAmt, 1, 1_000_000e6);
@@ -832,12 +841,17 @@ contract RewardsModuleFuzzTest is Test {
         usdc.mint(address(module), rewardAmt);
 
         uint256 totalBefore = vault.totalAssets();
+        uint256 vaultIdleBefore = usdc.balanceOf(address(vault));
 
         vm.prank(keeper);
         module.sweepToVault();
 
-        uint256 totalAfter = vault.totalAssets();
-        assertEq(totalAfter - totalBefore, rewardAmt, "totalAssets must increase by exact reward amount");
+        assertEq(vault.totalAssets(), totalBefore, "totalAssets must be invariant across sweep");
+        assertEq(
+            usdc.balanceOf(address(vault)) - vaultIdleBefore,
+            rewardAmt,
+            "vault idle must increase by exact reward amount"
+        );
         assertEq(usdc.balanceOf(address(module)), 0, "Module must be empty after sweep");
     }
 
