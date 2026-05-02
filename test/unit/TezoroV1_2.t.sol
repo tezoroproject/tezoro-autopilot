@@ -2767,4 +2767,52 @@ contract TezoroV1_2Test is Test {
             "unhealthy strategy must not receive new capital"
         );
     }
+
+    // =========================================================================
+    // SetPerformanceFee refreshes tracked
+    //                                 BEFORE accruing fee
+    // =========================================================================
+
+    /// @notice Yield earned but not yet reconciled must be taxed at the OLD
+    ///         performance-fee rate when the fee changes. Pre-fix, the accrual
+    ///         saw only the cached NAV, so unreconciled yield surfaced (and was
+    ///         taxed) only after the rate change — at the new rate. Post-fix,
+    ///         _refreshTrackedBalances() runs BEFORE _accruePerformanceFee so
+    ///         the in-flight gain is captured at the rate the LPs accepted.
+    function test_feeAccruesAtOldRateOnRaise() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        IStrategy[] memory strats = new IStrategy[](1);
+        uint256[] memory bpsList = new uint256[](1);
+        strats[0] = IStrategy(address(strategyA));
+        bpsList[0] = 8_000;
+        vm.prank(keeper);
+        vault.rebalance(strats, bpsList);
+
+        // Unreconciled yield: live ahead of tracked.
+        strategyA.simulateYield(20_000e6);
+        // sanity: tracked still stale, so totalAssets has not moved.
+        assertEq(
+            vault.trackedBalance(IStrategy(address(strategyA))),
+            80_000e6,
+            "precondition: tracked still pre-yield"
+        );
+
+        uint256 feeSharesBefore = vault.balanceOf(feeRecipient);
+
+        // Raise perf fee 10% -> 20%. Post-fix: refresh sees +20k of yield, the
+        // share-price step crosses HWM, and the fee mints at the OLD 10% rate.
+        // Pre-fix: refresh did not run; share price still at HWM; no fee mints
+        // until the next reconcile, by which time the rate is already 20%.
+        vm.prank(admin);
+        vault.setPerformanceFee(2_000);
+
+        uint256 feeSharesAfter = vault.balanceOf(feeRecipient);
+        assertGt(
+            feeSharesAfter,
+            feeSharesBefore,
+            "fee shares must mint at old rate when raising fee on stale NAV"
+        );
+    }
 }
