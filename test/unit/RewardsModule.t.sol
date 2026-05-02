@@ -400,6 +400,29 @@ contract RewardsModuleTest is Test {
         );
     }
 
+    /// @notice Audit this fix (Oak 2026-04-24): swap must reject
+    ///         minAmountOut == 0. Pre-fix the zero floor disabled the only
+    ///         on-chain output guard — a benign-but-buggy keeper integration
+    ///         could submit a default zero and silently lose reward MEV to
+    ///         thin liquidity or adverse routing. The router whitelist still
+    ///         bounds blast radius (user principal cannot leave through this
+    ///         path), but the slippage protection is no longer optional.
+    function test_swapRejectsZeroMinAmountOut() public {
+        vm.prank(admin);
+        module.setRouterWhitelist(address(router), true);
+
+        rwd.mint(address(module), 1e18);
+        usdc.mint(address(router), 1e6);
+        router.setUsdcOut(1e6);
+
+        vm.prank(keeper);
+        vm.expectRevert(RewardsModuleV1_2.ZeroMinAmountOut.selector);
+        module.swap(
+            address(router), address(rwd), address(usdc), 1e18, 0,
+            abi.encodeCall(MockRouter.doSwap, (address(rwd), 1e18))
+        );
+    }
+
     function test_swap_revertsOnSlippage() public {
         vm.prank(admin);
         module.setRouterWhitelist(address(router), true);

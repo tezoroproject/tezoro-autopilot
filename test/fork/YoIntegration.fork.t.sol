@@ -366,7 +366,7 @@ contract YoIntegrationTest is Test {
         );
 
         vm.prank(keeper);
-        rm.swap(UNISWAP_ROUTER, MORPHO_TOKEN, USDC, morphoOnRm, 0, routerData);
+        rm.swap(UNISWAP_ROUTER, MORPHO_TOKEN, USDC, morphoOnRm, 1, routerData);
 
         uint256 usdcOnRm = IERC20(USDC).balanceOf(address(rm));
         assertGt(usdcOnRm, 0, "Should have USDC after swap");

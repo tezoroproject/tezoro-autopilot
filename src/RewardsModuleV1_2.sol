@@ -66,6 +66,11 @@ contract RewardsModuleV1_2 is ReentrancyGuard {
     error CannotRescueBaseAsset();
     error CannotSwapBaseAsset();
     error SwapCallFailed();
+    /// @dev Thrown when swap is called with minAmountOut == 0. A zero floor
+    ///      would disable the only on-chain slippage check, letting a
+    ///      benign-but-buggy keeper integration silently lose reward MEV to
+    ///      thin liquidity or adverse routing.
+    error ZeroMinAmountOut();
     error IsPaused();
 
     // --- Modifiers ---
@@ -222,6 +227,10 @@ contract RewardsModuleV1_2 is ReentrancyGuard {
         if (!allowedRouters[router]) revert RouterNotWhitelisted();
         if (tokenOut != baseAsset) revert InvalidTokenOut();
         if (tokenIn == baseAsset) revert CannotSwapBaseAsset();
+        // Reject zero slippage floor — accepting minAmountOut == 0 would
+        // disable the only on-chain output guard, reducing slippage
+        // protection to "trust the keeper-supplied calldata".
+        if (minAmountOut == 0) revert ZeroMinAmountOut();
 
         IERC20(tokenIn).forceApprove(router, amountIn);
 
