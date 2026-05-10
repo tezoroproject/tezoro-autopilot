@@ -1960,9 +1960,7 @@ contract TezoroV1_2Test is Test {
         vm.prank(admin);
         vault.forceRedeem(alice);
 
-        // Deposit again so we can re-propose (bump staleness
-        // clock since 1 day > MAX_STALENESS).
-        vault.reconcile();
+        // Deposit again so we can re-propose.
         vm.prank(alice);
         vault.deposit(DEPOSIT, alice);
 
@@ -2429,9 +2427,18 @@ contract TezoroV1_2Test is Test {
     ///         price until the next reconcile.
     /// @notice Post-fix, trackedBalance is refreshed to strategy.balanceOf()
     ///         so accounting stays consistent with reality.
+    /// @dev    Uses two depositors so a real yield remainder exists in the
+    ///         strategy after the partial-cohort withdrawal — with a single
+    ///         depositor, audit-fix(4-followup)'s live-aware views correctly
+    ///         price all yield into that depositor's maxWithdraw, leaving no
+    ///         residual to assert against.
     function test_overdeliveryRefreshesTrackedBalance() public {
+        // Two depositors so a partial-cohort exit leaves yield behind for
+        // the stayer.
         vm.prank(alice);
         vault.deposit(DEPOSIT, alice);
+        vm.prank(bob);
+        vault.deposit(DEPOSIT, bob);
 
         IStrategy[] memory strats = new IStrategy[](1);
         uint256[] memory bpsList = new uint256[](1);
@@ -2450,6 +2457,8 @@ contract TezoroV1_2Test is Test {
         uint256 overdeliver = 20_000e6;
         strategyA.setExtraWithdraw(overdeliver);
 
+        // Alice exits — Bob stays. The strategy must retain Bob's share + the
+        // overdelivery slack rather than being zeroed.
         uint256 maxW = vault.maxWithdraw(alice);
         vm.prank(alice);
         vault.withdraw(maxW, alice, alice);
@@ -2524,55 +2533,188 @@ contract TezoroV1_2Test is Test {
     }
 
     // =========================================================================
-    // MAX_STALENESS + permissionless reconcile
+    // Live trackedBalance refresh on user entry/exit (Oak Major-4 followup)
     // =========================================================================
 
-    /// @notice Deposit reverts with StaleNAV once the cached NAV is older than
-    ///         MAX_STALENESS, bounding the stale-trackedBalance pricing window.
-    function test_depositRevertsWhenStale() public {
-        vm.warp(block.timestamp + vault.MAX_STALENESS() + 1);
-
+    /// @notice Pre-followup, share pricing used the cached trackedBalance which
+    ///         was refreshed only on reconcile(). The original audit-fix(4)
+    ///         capped the window with MAX_STALENESS = 1 hour, but Oak v0.2
+    ///         re-review pointed out that any strategy value change WITHIN
+    ///         that window still mispriced deposits — yield accrued between
+    ///         reconciles transferred from later entrants to earlier holders.
+    ///         Post-followup, deposit/mint/withdraw/redeem refresh
+    ///         trackedBalance live before fee accrual and share pricing, so
+    ///         the timing window the keeper schedule cannot cover is closed
+    ///         on-chain.
+    function test_depositPricesAgainstLiveStrategyBalance() public {
+        // Alice enters first and the keeper allocates 50/50 across strategies.
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_2.StaleNAV.selector);
         vault.deposit(DEPOSIT, alice);
+
+        IStrategy[] memory strats = new IStrategy[](2);
+        uint256[] memory bps = new uint256[](2);
+        strats[0] = IStrategy(address(strategyA));
+        strats[1] = IStrategy(address(strategyB));
+        bps[0] = 4_850;
+        bps[1] = 4_850; // 3% idle buffer leaves the rest in the vault
+        vm.prank(keeper);
+        vault.rebalance(strats, bps);
+
+        // strategyA accrues yield. trackedBalance is now stale relative to the
+        // strategy's real balance — pre-followup, this delta would be priced
+        // into Bob's deposit only after the next reconcile() call.
+        uint256 yield = DEPOSIT / 10; // 10% jump
+        strategyA.simulateYield(yield);
+
+        // Bob deposits WITHOUT a manual reconcile.
+        uint256 bobShares;
+        {
+            vm.prank(bob);
+            bobShares = vault.deposit(DEPOSIT, bob);
+        }
+
+        // Compare: what would Bob have minted if the cache had been refreshed
+        // by an explicit reconcile call before the deposit? Live refresh inside
+        // deposit must produce the same outcome.
+        TezoroV1_2 mirror = _deployMirrorVaultWithSameYield(yield);
+        vm.prank(bob);
+        token.approve(address(mirror), type(uint256).max);
+        vm.prank(bob);
+        uint256 mirrorBobShares = mirror.deposit(DEPOSIT, bob);
+
+        assertEq(
+            bobShares,
+            mirrorBobShares,
+            "deposit must price against live strategy balance, not stale trackedBalance"
+        );
+
+        // And Bob must mint strictly fewer shares than Alice did at the
+        // pre-yield NAV (assets/share went up, share/asset went down).
+        uint256 aliceShares = vault.balanceOf(alice);
+        assertLt(
+            bobShares * vault.totalAssets() / vault.totalSupply(),
+            aliceShares * vault.totalAssets() / vault.totalSupply() + 1, // share-price equality bound
+            "Bob mints at the post-yield share price, not the stale one"
+        );
+        assertLt(bobShares, aliceShares, "Bob mints fewer shares per asset than Alice (yield in between)");
     }
 
-    /// @notice Withdraw is gated by the same freshness check.
-    function test_withdrawRevertsWhenStale() public {
+    /// @notice Symmetric to deposit: redeem must use live strategy balance so
+    ///         exiters receive their share of yield earned since the last
+    ///         reconcile, instead of leaving it behind for stayers.
+    function test_redeemPricesAgainstLiveStrategyBalance() public {
         vm.prank(alice);
         vault.deposit(DEPOSIT, alice);
 
-        vm.warp(block.timestamp + vault.MAX_STALENESS() + 1);
+        IStrategy[] memory strats = new IStrategy[](2);
+        uint256[] memory bps = new uint256[](2);
+        strats[0] = IStrategy(address(strategyA));
+        strats[1] = IStrategy(address(strategyB));
+        bps[0] = 4_850;
+        bps[1] = 4_850;
+        vm.prank(keeper);
+        vault.rebalance(strats, bps);
 
+        uint256 yield = DEPOSIT / 10;
+        strategyA.simulateYield(yield);
+
+        // Alice redeems half her shares without a manual reconcile.
+        uint256 half = vault.balanceOf(alice) / 2;
+        uint256 balBefore = token.balanceOf(alice);
         vm.prank(alice);
-        vm.expectRevert(TezoroV1_2.StaleNAV.selector);
-        vault.withdraw(1e6, alice, alice);
+        vault.redeem(half, alice, alice);
+        uint256 received = token.balanceOf(alice) - balBefore;
+
+        // Without live refresh, Alice would have received ≈ DEPOSIT/2.
+        // With live refresh, she receives a proportional cut of the yield too.
+        // The performance fee (10%) takes a slice, but Alice's net must still
+        // exceed the stale baseline by a measurable margin.
+        assertGt(received, DEPOSIT / 2, "redeem must reflect live strategy yield, not stale cache");
     }
 
-    /// @notice Anyone can call reconcile() to refresh the staleness clock —
-    ///         users self-unblock if the keeper falls behind.
+    /// @notice The live refresh helper has try/catch around each strategy's
+    ///         balanceOf() call. A single broken strategy must not block user
+    ///         actions — the cached value is reused for that strategy, and
+    ///         healthy strategies keep refreshing.
+    function test_brokenStrategyDoesNotBlockLiveRefresh() public {
+        vm.prank(alice);
+        vault.deposit(DEPOSIT, alice);
+
+        IStrategy[] memory strats = new IStrategy[](2);
+        uint256[] memory bps = new uint256[](2);
+        strats[0] = IStrategy(address(strategyA));
+        strats[1] = IStrategy(address(strategyB));
+        bps[0] = 4_850;
+        bps[1] = 4_850;
+        vm.prank(keeper);
+        vault.rebalance(strats, bps);
+
+        // Break strategyA — its balanceOf() now reverts.
+        strategyA.setBroken(true);
+
+        // Bob can still deposit; the live-refresh loop catches the revert and
+        // keeps the cached trackedBalance for strategyA, while strategyB
+        // refreshes normally.
+        vm.prank(bob);
+        uint256 bobShares = vault.deposit(DEPOSIT, bob);
+        assertGt(bobShares, 0, "broken strategy must not block user entry");
+    }
+
+    /// @notice reconcile() remains permissionless — no role check. After the
+    ///         live-refresh fix it is no longer load-bearing for share-pricing
+    ///         (every user entry/exit refreshes), but it is still useful for
+    ///         off-chain readers and for fee accrual on idle vaults.
     function test_reconcileIsPermissionless() public {
         vm.prank(alice);
         vault.deposit(DEPOSIT, alice);
 
-        vm.warp(block.timestamp + vault.MAX_STALENESS() + 1);
-
         // Random EOA — not admin, not keeper.
         vm.prank(nobody);
-        vault.reconcile();
-
-        // Now deposit succeeds.
-        vm.prank(alice);
-        vault.deposit(DEPOSIT, alice);
+        vault.reconcile(); // must not revert
     }
 
-    /// @notice reconcile bumps lastReconcileTimestamp.
-    function test_reconcileBumpsTimestamp() public {
-        uint256 before = vault.lastReconcileTimestamp();
-        vm.warp(block.timestamp + 30 minutes);
-        vault.reconcile();
-        assertEq(vault.lastReconcileTimestamp(), block.timestamp);
-        assertGt(vault.lastReconcileTimestamp(), before);
+    /// @dev Deploys a fresh vault that starts with the same Alice deposit and
+    ///      same simulated yield, but the depositor explicitly calls
+    ///      reconcile() before depositing. Used as a behavioural reference for
+    ///      "what the live-refresh fix replicates automatically".
+    function _deployMirrorVaultWithSameYield(uint256 yield) internal returns (TezoroV1_2) {
+        TezoroV1_2 mirror = new TezoroV1_2(
+            IERC20(address(token)),
+            "Mirror USDC-A",
+            "mUSDC-A",
+            admin,
+            feeRecipient,
+            1_000,
+            300
+        );
+
+        V1TestStrategy mStratA = new V1TestStrategy(address(token));
+        V1TestStrategy mStratB = new V1TestStrategy(address(token));
+
+        vm.startPrank(admin);
+        mirror.addStrategy(IStrategy(address(mStratA)));
+        mirror.addStrategy(IStrategy(address(mStratB)));
+        mirror.setKeeper(keeper);
+        vm.stopPrank();
+
+        token.mint(alice, DEPOSIT);
+        vm.prank(alice);
+        token.approve(address(mirror), type(uint256).max);
+        vm.prank(alice);
+        mirror.deposit(DEPOSIT, alice);
+
+        IStrategy[] memory strats = new IStrategy[](2);
+        uint256[] memory bps = new uint256[](2);
+        strats[0] = IStrategy(address(mStratA));
+        strats[1] = IStrategy(address(mStratB));
+        bps[0] = 4_850;
+        bps[1] = 4_850;
+        vm.prank(keeper);
+        mirror.rebalance(strats, bps);
+
+        mStratA.simulateYield(yield);
+        mirror.reconcile(); // explicit pre-deposit refresh — the mirror baseline.
+        return mirror;
     }
 
     // =========================================================================
