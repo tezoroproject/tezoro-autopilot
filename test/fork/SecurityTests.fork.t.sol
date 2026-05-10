@@ -1774,8 +1774,20 @@ contract SecurityTests is BaseChainForkTest {
         // Bob's position should be worth approximately what he deposited
         assertApproxEqAbs(bobAssets, depositAmount, 2, "No arbitrage from deposit-freeze");
 
-        // Share price unchanged
-        assertEq(vault.convertToAssets(1e12), priceBefore, "Share price should remain stable");
+        // Share price stable up to live-yield accrual within the same block.
+        // After audit-fix(4-followup), each user entry refreshes trackedBalance
+        // from live strategy reads, so an Aave-style aToken that accrues
+        // interest on the deposit transaction (liquidityIndex tick) surfaces
+        // a 1-2 wei share-price increment between Alice's and Bob's deposits.
+        // The 2-wei tolerance keeps the no-arbitrage invariant meaningful
+        // (still rules out percentage-scale share-price moves from the freeze)
+        // without flagging block-level rounding noise.
+        assertApproxEqAbs(
+            vault.convertToAssets(1e12),
+            priceBefore,
+            2,
+            "Share price should remain stable (within block-level rounding)"
+        );
     }
 
     /// @notice forceRedeem sends assets to the USER, not admin (fund theft prevention)
