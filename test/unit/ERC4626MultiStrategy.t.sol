@@ -900,6 +900,93 @@ contract ERC4626MultiStrategyTest is Test {
         assertApproxEqAbs(token.balanceOf(vaultAddr) - vaultBalBefore, 50e6, 2);
     }
 
+    // =========================================================================
+    // deallocate redeem fallback uses previewWithdraw (Oak Minor-22 followup)
+    // =========================================================================
+
+    /// @notice Pre-followup, deallocate's redeem fallback quoted shares via
+    ///         convertToShares (deposit-side, round-DOWN). When the sub-vault's
+    ///         share price is above 1, a small deallocation target rounded to
+    ///         ZERO shares; the fallback then called redeem(0) which the
+    ///         sub-vault accepted as a no-op, leaving the position intact and
+    ///         the keeper unable to free liquidity through the ordinary path.
+    ///         Post-followup uses previewWithdraw (round-UP) capped against
+    ///         maxRedeem, mirroring the user-facing withdraw fallback.
+    function test_deallocate_redeemFallbackUsesPreviewWithdraw() public {
+        RedeemOnlyVault4626 ro = new RedeemOnlyVault4626(IERC20(address(token)));
+        vm.prank(adminAddr);
+        strategy.addSubVault(address(ro));
+
+        _fundVaultAndApprove(100e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(100e6);
+        vm.prank(keeperAddr);
+        strategy.allocate(address(ro), 100e6);
+
+        // Inflate share price 2x via direct donation: convertToShares(1) → 0,
+        // previewWithdraw(1) → 1.
+        token.mint(address(ro), 100e6);
+        assertEq(ro.convertToShares(1), 0);
+        assertEq(ro.previewWithdraw(1), 1);
+
+        uint256 idleBefore = token.balanceOf(address(strategy));
+        vm.prank(keeperAddr);
+        strategy.deallocate(address(ro), 1);
+
+        // Pre-followup: convertToShares quotes 0; redeem(0) is a no-op;
+        //               idle does not grow.
+        // Post-followup: previewWithdraw quotes 1 share; redeem returns
+        //                2 wei to the strategy (share price 2x).
+        uint256 freed = token.balanceOf(address(strategy)) - idleBefore;
+        assertGe(freed, 1, "deallocate redeem fallback must reach available sub-vault liquidity");
+    }
+
+    /// @notice Cap against maxRedeem so a previewWithdraw quote larger than the
+    ///         sub-vault's per-call capacity does not push redeem into a hard
+    ///         revert; deallocate must succeed for the capped amount.
+    function test_deallocate_redeemFallbackCapsToMaxRedeem() public {
+        RedeemOnlyVault4626 ro = new RedeemOnlyVault4626(IERC20(address(token)));
+        ro.setMaxRedeemCap(50e6);
+        vm.prank(adminAddr);
+        strategy.addSubVault(address(ro));
+
+        _fundVaultAndApprove(200e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(200e6);
+        vm.prank(keeperAddr);
+        strategy.allocate(address(ro), 200e6);
+
+        uint256 idleBefore = token.balanceOf(address(strategy));
+        vm.prank(keeperAddr);
+        strategy.deallocate(address(ro), 200e6);
+
+        uint256 freed = token.balanceOf(address(strategy)) - idleBefore;
+        assertApproxEqAbs(freed, 50e6, 2, "must extract the maxRedeem-capped portion");
+    }
+
+    /// @notice When the redeem fallback quotes zero shares (e.g. sub-vault
+    ///         redeem-paused while withdraw also reverts), surface the
+    ///         condition explicitly so the keeper can react instead of
+    ///         silently emitting a no-op Deallocated event.
+    function test_deallocate_redeemFallbackRevertsOnZeroShares() public {
+        RedeemOnlyVault4626 ro = new RedeemOnlyVault4626(IERC20(address(token)));
+        vm.prank(adminAddr);
+        strategy.addSubVault(address(ro));
+
+        _fundVaultAndApprove(100e6);
+        vm.prank(vaultAddr);
+        strategy.deposit(100e6);
+        vm.prank(keeperAddr);
+        strategy.allocate(address(ro), 100e6);
+
+        // Pause redeem (cap to zero) so the fallback cannot service any shares.
+        ro.setMaxRedeemCap(0);
+
+        vm.prank(keeperAddr);
+        vm.expectRevert(ERC4626MultiStrategyV1_2.NothingToDeallocate.selector);
+        strategy.deallocate(address(ro), 1);
+    }
+
     // ========== Helpers ==========
 
     function _fundVaultAndApprove(uint256 amount) internal {

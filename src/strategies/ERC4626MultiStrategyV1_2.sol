@@ -72,6 +72,7 @@ contract ERC4626MultiStrategyV1_2 is IStrategy, ReentrancyGuard {
     }
 
     error MaxSubVaultsTooLow();
+    error NothingToDeallocate();
 
     constructor(
         address asset_,
@@ -292,10 +293,23 @@ contract ERC4626MultiStrategyV1_2 is IStrategy, ReentrancyGuard {
     function deallocate(address subVault, uint256 amount) external onlyKeeper nonReentrant {
         if (!isApproved[subVault]) revert SubVaultNotApproved();
 
-        // Try withdraw first; fall back to redeem for vaults that only support redeem (e.g., YO.xyz)
+        // Try withdraw first; fall back to redeem for vaults that only support
+        // redeem (e.g., YO.xyz). Use previewWithdraw (withdraw-side, rounds UP)
+        // rather than convertToShares (deposit-side, rounds DOWN). Round-down
+        // quoting can deliver less than `amount`, or quote zero shares when
+        // the sub-vault's share price is above 1 — leaving redeemable
+        // liquidity unreachable through deallocate. Mirrors the round-up
+        // fallback used in withdraw().
         try IERC4626(subVault).withdraw(amount, address(this), address(this)) {}
         catch {
-            uint256 shares = IERC4626(subVault).convertToShares(amount);
+            uint256 shares = IERC4626(subVault).previewWithdraw(amount);
+            // Cap against maxRedeem so a previewWithdraw quote larger than
+            // the sub-vault's per-call capacity does not push redeem into a
+            // hard revert; recover whatever liquidity is presently available
+            // and let the keeper re-issue for the rest.
+            uint256 maxR = IERC4626(subVault).maxRedeem(address(this));
+            if (shares > maxR) shares = maxR;
+            if (shares == 0) revert NothingToDeallocate();
             IERC4626(subVault).redeem(shares, address(this), address(this));
         }
         emit Deallocated(subVault, amount);
